@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lens Today - Control Panel</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#121212',
+                        darker: '#0a0a0a',
+                        accent: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .caption-box { white-space: pre-wrap; word-break: break-word; }
+        .graphic-thumb { transition: transform 0.2s; cursor: pointer; }
+        .graphic-thumb:hover { transform: scale(1.05); }
+        details > summary { list-style: none; cursor: pointer; }
+        details > summary::-webkit-details-marker { display: none; }
+    </style>
+</head>
+<body class="bg-darker text-gray-200 font-sans antialiased min-h-screen">
+
+    <!-- Navbar -->
+    <nav class="bg-dark border-b border-gray-800 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex-shrink-0 flex items-center gap-3">
+                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                        Lens Today
+                    </h1>
+                    <span class="text-xs font-semibold px-2 py-1 bg-gray-800 text-gray-400 rounded-full border border-gray-700">Automation Hub</span>
+                </div>
+                <button hx-post="/trigger" hx-swap="none" onclick="alert('Pipeline triggered! Refresh in a minute to see results.')"
+                    class="bg-accent hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-200">
+                    Run Pipeline Now
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Next Post Countdown -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div class="bg-dark border border-gray-800 rounded-xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+            <div class="flex items-center gap-3">
+                <span class="text-xl">⏱️</span>
+                <div>
+                    <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Next Scheduled Post</div>
+                    <div id="next-run-label" class="text-sm text-gray-400 mt-0.5">Loading...</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-center">
+                    <div id="countdown-display" class="text-4xl font-bold font-mono tracking-tight text-white tabular-nums">--:--:--</div>
+                    <div class="text-xs text-gray-600 mt-1">HH : MM : SS</div>
+                </div>
+                <div id="countdown-status" class="w-2.5 h-2.5 rounded-full bg-gray-700 flex-shrink-0"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        let targetTime = null;
+        let tickInterval = null;
+
+        function fetchNextRun() {
+            fetch('/next-run')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.next_run) {
+                        targetTime = new Date(data.next_run);
+                        const label = document.getElementById('next-run-label');
+                        label.textContent = targetTime.toLocaleTimeString([], {
+                            hour: '2-digit', minute: '2-digit', hour12: true,
+                            weekday: 'short'
+                        });
+                        document.getElementById('countdown-status').className =
+                            'w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0 animate-pulse';
+                    } else {
+                        document.getElementById('next-run-label').textContent = 'Not scheduled';
+                        document.getElementById('countdown-display').textContent = '--:--:--';
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('next-run-label').textContent = 'Unable to fetch';
+                });
+        }
+
+        function tick() {
+            if (!targetTime) return;
+            const now = new Date();
+            let diff = Math.floor((targetTime - now) / 1000);
+
+            if (diff <= 0) {
+                document.getElementById('countdown-display').textContent = '00:00:00';
+                document.getElementById('next-run-label').textContent = 'Running now...';
+                document.getElementById('countdown-status').className =
+                    'w-2.5 h-2.5 rounded-full bg-yellow-400 flex-shrink-0 animate-pulse';
+                targetTime = null;
+                // Re-fetch after a short delay to get the new next run time
+                setTimeout(fetchNextRun, 8000);
+                return;
+            }
+
+            const h = Math.floor(diff / 3600);
+            const m = Math.floor((diff % 3600) / 60);
+            const s = diff % 60;
+            document.getElementById('countdown-display').textContent =
+                String(h).padStart(2, '0') + ':' +
+                String(m).padStart(2, '0') + ':' +
+                String(s).padStart(2, '0');
+
+            // Pulse red when under 5 minutes
+            if (diff < 300) {
+                document.getElementById('countdown-status').className =
+                    'w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0 animate-pulse';
+            }
+        }
+
+        fetchNextRun();
+        tickInterval = setInterval(tick, 1000);
+        // Refresh the scheduled time every 10 minutes in case it changed
+        setInterval(fetchNextRun, 600000);
+    })();
+    </script>
+
+    <!-- Stats Bar -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+            {% set published_count = articles | selectattr('status', 'equalto', 'PUBLISHED') | list | length %}
+            {% set qa_failed_count = articles | selectattr('status', 'equalto', 'QA_FAILED') | list | length %}
+            {% set auto_fixed_count = articles | selectattr('qa_status', 'equalto', 'AUTO_FIXED') | list | length %}
+            {% set dropped_count = articles | selectattr('status', 'equalto', 'DROP') | list | length %}
+            {% set pending_count = articles | selectattr('status', 'equalto', 'PUBLISH') | list | length %}
+
+            <div class="bg-dark border border-gray-800 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-green-400">{{ published_count }}</div>
+                <div class="text-xs text-gray-500 mt-1">Published</div>
+            </div>
+            <div class="bg-dark border border-gray-800 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-yellow-400">{{ auto_fixed_count }}</div>
+                <div class="text-xs text-gray-500 mt-1">QA Auto-Fixed</div>
+            </div>
+            <div class="bg-dark border border-gray-800 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-red-400">{{ qa_failed_count }}</div>
+                <div class="text-xs text-gray-500 mt-1">QA Blocked</div>
+            </div>
+            <div class="bg-dark border border-gray-800 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-gray-400">{{ dropped_count }}</div>
+                <div class="text-xs text-gray-500 mt-1">Dropped</div>
+            </div>
+            <div class="bg-dark border border-gray-800 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-blue-400">{{ pending_count }}</div>
+                <div class="text-xs text-gray-500 mt-1">Pending</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        
+        <!-- Video Submission Form -->
+        <div class="bg-dark border border-gray-800 rounded-xl p-6 shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-2 flex items-center gap-2">
+                <span>📹</span> Submit Viral Video
+            </h2>
+            <p class="text-sm text-gray-500 mb-4">Queue a video for automated downloading, templating, and publishing to Reels.</p>
+            
+            <form hx-post="/submit-video" hx-swap="outerHTML" class="flex flex-col gap-4 max-w-2xl">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Video Link (FB/IG)</label>
+                    <input type="url" name="url" required placeholder="https://www.instagram.com/reel/..."
+                           class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-accent">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Context (Optional)</label>
+                    <input type="text" name="context" placeholder="e.g. Messi scores amazing goal"
+                           class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-accent">
+                </div>
+                <div>
+                    <button type="submit" class="bg-accent hover:bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200">
+                        Queue Video
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="mb-4">
+            <h2 class="text-xl font-semibold">Recent Articles</h2>
+            <p class="text-sm text-gray-500 mt-1">Live view of the ingestion, QA, and publishing pipeline.</p>
+        </div>
+
+        <div class="flex flex-col gap-4">
+            {% for article in articles %}
+            <div class="bg-dark border border-gray-800 rounded-xl overflow-hidden shadow-lg">
+                <div class="flex flex-col sm:flex-row gap-0">
+
+                    <!-- Graphic Thumbnail -->
+                    <div class="sm:w-36 flex-shrink-0 bg-gray-900 flex items-center justify-center p-3">
+                        {% set img_path = '/static/images/article_' ~ article.id ~ '.jpg' %}
+                        {% if article.status in ['PUBLISHED', 'PUBLISH', 'QA_FAILED'] and article.headline %}
+                            <img src="{{ img_path }}"
+                                 onerror="this.parentElement.innerHTML='<span class=\'text-gray-600 text-xs text-center\'>No graphic</span>'"
+                                 class="graphic-thumb w-full rounded-lg object-cover aspect-square"
+                                 alt="Post graphic"
+                                 onclick="document.getElementById('modal-{{ article.id }}').classList.remove('hidden')">
+                        {% else %}
+                            <span class="text-gray-700 text-xs text-center">No graphic</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Article Info -->
+                    <div class="flex-1 p-4 flex flex-col gap-2">
+                        <!-- Top row: source, status badges, timestamp -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs text-accent font-semibold">{{ article.source }}</span>
+
+                            <!-- Pipeline Status -->
+                            {% if article.status == 'PUBLISHED' %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-900 text-green-300 border border-green-700">✅ PUBLISHED</span>
+                            {% elif article.status == 'QA_FAILED' %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-900 text-red-300 border border-red-700">❌ QA BLOCKED</span>
+                            {% elif article.status == 'PUBLISH' %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-900 text-blue-300 border border-blue-700">⏳ PENDING</span>
+                            {% elif article.status == 'DROP' %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-800 text-gray-400 border border-gray-700">⛔ DROPPED</span>
+                            {% else %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-900 text-yellow-300 border border-yellow-700">{{ article.status }}</span>
+                            {% endif %}
+
+                            <!-- QA Status Badge -->
+                            {% if article.qa_status == 'PASSED' %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-950 text-green-400 border border-green-800">QA ✓ Passed</span>
+                            {% elif article.qa_status == 'AUTO_FIXED' %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-950 text-yellow-400 border border-yellow-800">QA ⚡ Auto-Fixed</span>
+                            {% elif article.qa_status == 'FAILED' %}
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-950 text-red-400 border border-red-800">QA ✗ Failed</span>
+                            {% endif %}
+
+                            {% if article.category %}
+                                <span class="px-2 py-0.5 text-xs rounded-full bg-gray-800 text-gray-400 border border-gray-700">{{ article.category }}</span>
+                            {% endif %}
+
+                            <span class="ml-auto text-xs text-gray-600">
+                                {{ article.created_at.strftime('%d %b %Y, %H:%M') if article.created_at else '-' }}
+                            </span>
+                        </div>
+
+                        <!-- Headline -->
+                        {% if article.headline %}
+                        <div class="text-sm font-bold text-white">{{ article.headline }}</div>
+                        {% endif %}
+
+                        <!-- Original title link -->
+                        <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 hover:text-gray-200 line-clamp-1 underline underline-offset-2">
+                            {{ article.title }}
+                        </a>
+
+                        <!-- QA Notes -->
+                        {% if article.qa_notes %}
+                        <details class="mt-1">
+                            <summary class="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                QA Report
+                            </summary>
+                            <div class="mt-2 text-xs text-gray-400 bg-gray-900 rounded-lg p-3 border border-gray-700 caption-box">{{ article.qa_notes }}</div>
+                        </details>
+                        {% endif %}
+
+                        <!-- Caption Preview -->
+                        {% if article.social_media_caption %}
+                        <details class="mt-1">
+                            <summary class="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z"/></svg>
+                                Caption Preview
+                            </summary>
+                            <div class="mt-2 text-xs text-gray-300 bg-gray-900 rounded-lg p-3 border border-gray-700 caption-box leading-relaxed">{{ article.social_media_caption }}
+
+{{ article.engagement_question }}
+
+{{ article.hashtags }}
+
+{% if article.url %}Source Article: {{ article.url }}{% endif %}</div>
+                        </details>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full-size graphic modal -->
+            {% if article.headline %}
+            <div id="modal-{{ article.id }}" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4"
+                 onclick="this.classList.add('hidden')">
+                <div class="max-w-lg w-full" onclick="event.stopPropagation()">
+                    <img src="/static/images/article_{{ article.id }}.jpg" class="w-full rounded-xl shadow-2xl" alt="Post graphic">
+                    <button onclick="document.getElementById('modal-{{ article.id }}').classList.add('hidden')"
+                        class="mt-3 w-full text-center text-sm text-gray-400 hover:text-white">Close</button>
+                </div>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="bg-dark border border-gray-800 rounded-xl px-6 py-12 text-center text-gray-500">
+                No articles processed yet. The pipeline runs automatically every {{ poll_interval_hours }} hours or click "Run Pipeline Now".
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+
+</body>
+</html>

@@ -1,0 +1,273 @@
+import logging
+import asyncio
+import os
+from app.scraper import fetch_5_articles, extract_article_content
+from app.ai import analyze_articles_batch
+from app.image_generator import generate_graphic
+from app.publisher import upload_image_to_facebook, publish_to_instagram
+from app.qa_agent import run_qa_checks
+from app.config import APP_BASE_URL
+from app.db import (
+    is_url_processed, insert_article, update_article_ai_decision,
+    mark_article_published, mark_article_publishing, reset_publishing_to_publish,
+    get_unpublished_articles, update_article_qa_status, mark_article_qa_failed
+)
+
+logger = logging.getLogger(__name__)
+
+_pipeline_lock = asyncio.Lock()
+
+
+def _build_image_url(article_id: int) -> str:
+    return f"{APP_BASE_URL}/static/images/article_{article_id}.jpg"
+
+
+async def _publish_to_all(article_id: int, image_path: str, caption: str) -> bool:
+    image_url = _build_image_url(article_id)
+
+    fb_success = await upload_image_to_facebook(image_path, caption)
+    await asyncio.sleep(3)
+
+    ig_success = False
+    if APP_BASE_URL:
+        ig_success = await publish_to_instagram(image_url, caption)
+    else:
+        logger.warning("APP_BASE_URL not set — skipping Instagram (needs public URL).")
+
+    return fb_success or ig_success
+
+
+async def _run_qa_and_publish(article_id: int, image_path: str, caption: str,
+                               source_text: str, headline: str, hashtags: str,
+                               article_url: str, decision: dict) -> bool:
+    qa_result = await run_qa_checks(
+        article_id=article_id,
+        image_path=image_path,
+        caption=caption,
+        source_text=source_text,
+        headline=headline,
+        hashtags=hashtags,
+        article_url=article_url,
+        decision=decision,
+    )
+
+    fixes_str = "; ".join(qa_result["fixes_applied"]) if qa_result["fixes_applied"] else ""
+    failures_str = "; ".join(qa_result["failures"]) if qa_result["failures"] else ""
+    qa_notes = ""
+    if fixes_str:
+        qa_notes += f"Fixes: {fixes_str}"
+    if failures_str:
+        qa_notes += (" | " if qa_notes else "") + f"Failures: {failures_str}"
+
+    if not qa_result["passed"]:
+        logger.error(f"QA BLOCKED article {article_id}: {failures_str}")
+        await mark_article_qa_failed(article_id, qa_notes[:1000])
+        return False
+
+    await update_article_qa_status(article_id, qa_result["status"], qa_notes[:1000])
+
+    claimed = await mark_article_publishing(article_id)
+    if not claimed:
+        logger.warning(f"Article {article_id} already claimed by another run — skipping to prevent duplicate post.")
+        return False
+
+    verified_image_path = qa_result["image_path"]
+    verified_caption = qa_result["caption"]
+
+    logger.info(f"QA {qa_result['status']} for article {article_id}. Proceeding to publish.")
+    try:
+        success = await _publish_to_all(article_id, verified_image_path, verified_caption)
+    except Exception as e:
+        logger.error(f"Publish error for article {article_id}: {e}")
+        await reset_publishing_to_publish(article_id)
+        return False
+
+    if success:
+        try:
+            await mark_article_published(article_id)
+            logger.info(f"Article {article_id} marked as PUBLISHED in DB.")
+        except Exception as e:
+            logger.error(
+                f"Article {article_id} was posted successfully but DB mark failed: {e}. "
+                f"Resetting to PUBLISH so it won't be re-posted (QA will block duplicate)."
+            )
+            await reset_publishing_to_publish(article_id)
+    else:
+        await reset_publishing_to_publish(article_id)
+
+    return success
+
+
+async def run_pipeline():
+    if _pipeline_lock.locked():
+        logger.warning("Pipeline already running — skipping this trigger to prevent duplicate posts.")
+        return
+
+    async with _pipeline_lock:
+        await _run_pipeline_inner()
+
+
+async def _run_pipeline_inner():
+    logger.info("Starting Lens Today Pipeline execution...")
+
+    articles_meta = await fetch_5_articles()
+
+    # ── Phase 1: Process any new articles from feeds ──────────────────────────
+    # We always fall through to Phase 2 (retry loop) regardless of whether
+    # new articles were found, so stuck PUBLISH articles are never abandoned.
+    articles_with_content = []
+    for meta in articles_meta:
+        url = meta['url']
+        title = meta['title']
+        source = meta['source']
+
+        if await is_url_processed(url):
+            logger.info(f"Article already processed: {title}")
+            continue
+
+        logger.info(f"Processing new article: {title}")
+        article_id = await insert_article(source, url, title)
+
+        result = await asyncio.to_thread(extract_article_content, url)
+        if not result or not result.get("content"):
+            rss_summary = meta.get("rss_summary", "")
+            if rss_summary:
+                logger.info(f"Full article blocked for {url} — using RSS summary as fallback.")
+                result = {"content": rss_summary}
+            else:
+                logger.warning(f"Could not extract content for {url}. Dropping.")
+                await update_article_ai_decision(
+                    article_id, "DROP", "none", 0, "", "", "", "", "", "", None
+                )
+                continue
+
+        meta['content'] = result['content']
+        if 'article_image_url' in result:
+            meta['article_image_url'] = result['article_image_url']
+        if 'article_images' in result:
+            meta['article_images'] = result['article_images']
+        meta['article_id'] = article_id
+        articles_with_content.append(meta)
+
+    if articles_with_content:
+        ai_decisions = await analyze_articles_batch(articles_with_content)
+
+        if not ai_decisions:
+            logger.error("AI returned no decisions for new articles.")
+        else:
+            for idx, article in enumerate(articles_with_content):
+                article_id = article['article_id']
+
+                decision = None
+                for d in ai_decisions:
+                    if d.get('slot') == idx + 1:
+                        decision = d
+                        break
+
+                if not decision and idx < len(ai_decisions):
+                    decision = ai_decisions[idx]
+
+                if decision:
+                    status = "PUBLISH"
+                    category = decision.get("category", "Core")
+                    try:
+                        slot = int(decision.get("slot", idx + 1))
+                    except (ValueError, TypeError):
+                        slot = idx + 1
+                    headline = decision.get("headline", "")
+                    source_text = decision.get("source_text", "")
+                    search_query = decision.get("search_query", "")
+                    social_caption = decision.get("social_media_caption", "")
+                    engagement_question = decision.get("engagement_question", "")
+
+                    raw_hashtags = decision.get("hashtags", [])
+                    if isinstance(raw_hashtags, list):
+                        hashtags = " ".join([h if h.startswith('#') else f"#{h}" for h in raw_hashtags])
+                    else:
+                        hashtags = str(raw_hashtags)
+
+                    await update_article_ai_decision(
+                        article_id=article_id,
+                        status=status,
+                        category=category,
+                        slot=slot,
+                        headline=headline,
+                        source_text=source_text,
+                        search_query=search_query,
+                        social_media_caption=social_caption,
+                        engagement_question=engagement_question,
+                        hashtags=hashtags,
+                        article_image_url=article.get('article_image_url')
+                    )
+
+                    logger.info(f"AI Decision: PUBLISH. Category: {category}, Slot: {slot}")
+
+                    if 'article_image_url' in article:
+                        decision['article_image_url'] = article['article_image_url']
+                    if 'article_images' in article:
+                        decision['article_images'] = article['article_images']
+                    if 'rss_image' in article:
+                        decision['rss_image'] = article['rss_image']
+
+                    image_path = await asyncio.to_thread(generate_graphic, article_id, decision)
+
+                    article_url = article.get('url', '')
+                    full_caption = f"{social_caption}\n\n{engagement_question}\n\n{hashtags}"
+                    if article_url:
+                        full_caption += f"\n\nSource Article: {article_url}"
+                    full_caption = full_caption[:2000]
+
+                    await _run_qa_and_publish(
+                        article_id=article_id,
+                        image_path=image_path,
+                        caption=full_caption,
+                        source_text=source_text,
+                        headline=headline,
+                        hashtags=hashtags,
+                        article_url=article_url,
+                        decision=decision,
+                    )
+                else:
+                    logger.warning(f"No AI decision for article {article['url']}")
+                    await update_article_ai_decision(
+                        article_id, "DROP", "none", 0, "", "", "", "", "", "", None
+                    )
+    else:
+        logger.info("No new articles with content — skipping AI phase, going straight to retry.")
+
+    # ── Phase 2: Retry approved articles that weren't posted yet ─────────────
+    stuck_articles = await get_unpublished_articles()
+    if stuck_articles:
+        logger.info(f"Found {len(stuck_articles)} approved article(s) pending publish. Retrying...")
+        for article in stuck_articles:
+            article_id = article['id']
+            image_path = f"static/images/article_{article_id}.jpg"
+            caption = article.get('social_media_caption', '')
+            engagement_question = article.get('engagement_question', '')
+            source_text = article.get('source_text', '')
+            hashtags = article.get('hashtags', '')
+            headline = article.get('headline', '')
+            article_url = article.get('url', '')
+
+            full_caption = f"{caption}\n\n{engagement_question}\n\n{hashtags}"
+            if article_url:
+                full_caption += f"\n\nSource Article: {article_url}"
+            full_caption = full_caption[:2000]
+
+            if not os.path.exists(image_path):
+                logger.info(f"Image missing for article {article_id}, regenerating...")
+                image_path = await asyncio.to_thread(generate_graphic, article_id, article)
+
+            await _run_qa_and_publish(
+                article_id=article_id,
+                image_path=image_path,
+                caption=full_caption,
+                source_text=source_text,
+                headline=headline,
+                hashtags=hashtags,
+                article_url=article_url,
+                decision=article,
+            )
+            await asyncio.sleep(5)
+
+    logger.info("Pipeline execution completed.")

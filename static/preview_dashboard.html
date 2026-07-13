@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lens Today - Control Panel</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Custom Tailwind config for premium feel -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#121212',
+                        darker: '#0a0a0a',
+                        accent: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-darker text-gray-200 font-sans antialiased min-h-screen">
+    
+    <!-- Navbar -->
+    <nav class="bg-dark border-b border-gray-800 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex-shrink-0 flex items-center">
+                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                        Lens Today
+                    </h1>
+                    <span class="ml-2 text-xs font-semibold px-2 py-1 bg-gray-800 text-gray-400 rounded-full border border-gray-700">Automation Hub</span>
+                </div>
+                <div>
+                    <button hx-post="/trigger" hx-swap="none" onclick="alert('Pipeline Triggered!')" class="bg-accent hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-200">
+                        Run Pipeline Now
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-2">Recent Articles</h2>
+            <p class="text-sm text-gray-500">Live view of the ingestion and publishing pipeline.</p>
+        </div>
+
+        <div class="bg-dark border border-gray-800 rounded-xl overflow-hidden shadow-xl">
+            <table class="min-w-full divide-y divide-gray-800">
+                <thead class="bg-gray-900">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Source & Title</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">AI Category</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Processed At</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800">
+                    
+                    <tr class="hover:bg-gray-800 transition duration-150">
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col">
+                                <span class="text-xs text-accent font-semibold mb-1">The Daily Star</span>
+                                <a href="#" target="_blank" class="text-sm font-medium text-gray-200 hover:text-white line-clamp-2">
+                                    Government Announces Major Economic Reform Ahead of Election
+                                </a>
+                                
+                                <span class="mt-2 text-xs text-gray-500 italic border-l-2 border-gray-600 pl-2">
+                                    Government Announces Major Economic Reform Ahead of Election
+                                </span>
+                                
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-800 text-gray-300 border border-gray-700">
+                                    breaking
+                                </span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-900 text-green-300">PUBLISHED</span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            2026-06-21 21:44:17
+                        </td>
+                    </tr>
+                    
+                    <tr class="hover:bg-gray-800 transition duration-150">
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col">
+                                <span class="text-xs text-accent font-semibold mb-1">Dhaka Tribune</span>
+                                <a href="#" target="_blank" class="text-sm font-medium text-gray-200 hover:text-white line-clamp-2">
+                                    DeepSeek AI Unveils Revolutionary New Language Model
+                                </a>
+                                
+                                <span class="mt-2 text-xs text-gray-500 italic border-l-2 border-gray-600 pl-2">
+                                    DeepSeek AI Unveils Revolutionary New Language Model
+                                </span>
+                                
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-800 text-gray-300 border border-gray-700">
+                                    tech
+                                </span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-900 text-blue-300">PUBLISH PENDING</span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            2026-06-21 21:44:17
+                        </td>
+                    </tr>
+                    
+                    <tr class="hover:bg-gray-800 transition duration-150">
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col">
+                                <span class="text-xs text-accent font-semibold mb-1">Prothom Alo</span>
+                                <a href="#" target="_blank" class="text-sm font-medium text-gray-200 hover:text-white line-clamp-2">
+                                    Inflation Drops As Remittance Reaches All-Time High
+                                </a>
+                                
+                                <span class="mt-2 text-xs text-gray-500 italic border-l-2 border-gray-600 pl-2">
+                                    Inflation Drops As Remittance Reaches All-Time High
+                                </span>
+                                
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-800 text-gray-300 border border-gray-700">
+                                    economy
+                                </span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-900 text-yellow-300">PENDING</span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            2026-06-21 21:44:17
+                        </td>
+                    </tr>
+                    
+                    <tr class="hover:bg-gray-800 transition duration-150">
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col">
+                                <span class="text-xs text-accent font-semibold mb-1">BBC News</span>
+                                <a href="#" target="_blank" class="text-sm font-medium text-gray-200 hover:text-white line-clamp-2">
+                                    A Random Irrelevant Post about a Celebrity
+                                </a>
+                                
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-800 text-gray-300 border border-gray-700">
+                                    none
+                                </span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-900 text-red-300">DROPPED</span>
+                            
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            2026-06-21 21:44:17
+                        </td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+</body>
+</html>
