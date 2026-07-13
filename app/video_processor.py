@@ -42,8 +42,9 @@ def _create_text_overlay(width: int, height: int, title: str, credit_text: str) 
     if credit_text:
         bbox = draw.textbbox((0, 0), credit_text, font=credit_font)
         text_w = bbox[2] - bbox[0]
-        x_pos = width - text_w - 40  # 40px margin right
-        y_pos = 120  # 120px margin top
+        text_h = bbox[3] - bbox[1]
+        x_pos = width - text_w - 40 # 40px margin right
+        y_pos = 250 # 250px margin top (moved further down)
         
         for adj_x in [-2, 2]:
             for adj_y in [-2, 2]:
