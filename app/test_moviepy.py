@@ -1,3 +1,3 @@
-from moviepy.editor import VideoFileClip
-print(hasattr(VideoFileClip, 'resize'))
-print(hasattr(VideoFileClip, 'crop'))
+from moviepy import VideoFileClip
+print(hasattr(VideoFileClip, 'resized'))
+print(hasattr(VideoFileClip, 'cropped'))
