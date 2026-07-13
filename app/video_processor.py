@@ -1,5 +1,9 @@
 import os
 import logging
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
+
 from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
 from PIL import Image, ImageDraw, ImageFont
 
@@ -21,13 +25,13 @@ def _create_text_overlay(width: int, height: int, title: str, credit_text: str) 
         title_font = ImageFont.load_default()
         credit_font = ImageFont.load_default()
 
-    # Draw Title (Top Center)
+    # Draw Title (Bottom Center)
     if title:
         # Simple text wrapping could be added here if needed
         bbox = draw.textbbox((0, 0), title, font=title_font)
         text_w = bbox[2] - bbox[0]
         x_pos = (width - text_w) / 2
-        y_pos = height * 0.1 # 10% from top
+        y_pos = height * 0.85 # 85% from top
         
         # Draw outline
         outline_color = "black"
@@ -37,13 +41,13 @@ def _create_text_overlay(width: int, height: int, title: str, credit_text: str) 
         # Draw text
         draw.text((x_pos, y_pos), title, font=title_font, fill="yellow")
 
-    # Draw Credit (Bottom Right)
+    # Draw Credit (Top Right)
     if credit_text:
         bbox = draw.textbbox((0, 0), credit_text, font=credit_font)
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
-        x_pos = width - text_w - 40 # 40px margin
-        y_pos = height - text_h - 40
+        x_pos = width - text_w - 40 # 40px margin right
+        y_pos = 120 # 120px margin top (moved down)
         
         for adj_x in [-2, 2]:
             for adj_y in [-2, 2]:
@@ -65,27 +69,51 @@ def apply_video_template(video_path: str, template_path: str, title: str, credit
         
         # Load video
         video_clip = VideoFileClip(video_path)
-        w, h = video_clip.size
+        target_w, target_h = 1080, 1920
+        
+        # Calculate aspect ratios
+        video_ratio = video_clip.w / video_clip.h
+        target_ratio = target_w / target_h
+        
+        # Zoom to fill: Scale up while preserving aspect ratio
+        if video_ratio > target_ratio:
+            # Video is wider than 9:16; scale to match height
+            video_clip = video_clip.resize(height=target_h)
+        else:
+            # Video is narrower or exactly 9:16; scale to match width
+            video_clip = video_clip.resize(width=target_w)
+            
+        # Crop center to strictly fit 1080x1920
+        video_clip = video_clip.crop(
+            x_center=video_clip.w / 2, 
+            y_center=video_clip.h / 2, 
+            width=target_w, 
+            height=target_h
+        )
+        
+        # Place video in center
+        video_clip = video_clip.set_position("center")
         
         clips = [video_clip]
         
         # Add template overlay if it exists
         if os.path.exists(template_path):
             template_clip = ImageClip(template_path).set_duration(video_clip.duration)
-            # Resize template to match video dimensions if needed
-            if template_clip.size != (w, h):
-                template_clip = template_clip.resize(newsize=(w, h))
+            # Resize template to strictly fit 1080x1920 canvas
+            if template_clip.size != (target_w, target_h):
+                template_clip = template_clip.resize(newsize=(target_w, target_h))
+            template_clip = template_clip.set_position("center")
             clips.append(template_clip)
         else:
             logger.warning(f"Template not found at {template_path}, skipping template overlay.")
 
         # Create and add text overlay
-        text_overlay_path = _create_text_overlay(w, h, title, credit_text)
-        text_clip = ImageClip(text_overlay_path).set_duration(video_clip.duration)
+        text_overlay_path = _create_text_overlay(target_w, target_h, title, credit_text)
+        text_clip = ImageClip(text_overlay_path).set_duration(video_clip.duration).set_position("center")
         clips.append(text_clip)
 
-        # Composite everything
-        final_clip = CompositeVideoClip(clips)
+        # Composite everything on a 1080x1920 canvas
+        final_clip = CompositeVideoClip(clips, size=(target_w, target_h))
         
         output_path = f"static/videos/final_{output_id}.mp4"
         

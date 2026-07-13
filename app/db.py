@@ -36,6 +36,7 @@ async def init_db():
                     id SERIAL PRIMARY KEY,
                     url TEXT NOT NULL,
                     context TEXT,
+                    video_index INTEGER DEFAULT 1,
                     status VARCHAR(20) DEFAULT 'PENDING',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -51,6 +52,7 @@ async def init_db():
                 'ALTER TABLE articles ADD COLUMN article_image_url TEXT;',
                 "ALTER TABLE articles ADD COLUMN qa_status VARCHAR(20);",
                 'ALTER TABLE articles ADD COLUMN qa_notes TEXT;',
+                'ALTER TABLE video_queue ADD COLUMN video_index INTEGER DEFAULT 1;',
             ]:
                 try:
                     await conn.execute(col_def)
@@ -207,14 +209,14 @@ async def get_recent_articles(limit: int = 50):
         ''', limit)
         return [dict(r) for r in records]
 
-async def insert_video_request(url: str, context: str) -> int:
+async def insert_video_request(url: str, context: str, video_index: int = 1) -> int:
     p = await get_pool()
     async with p.acquire() as conn:
         record = await conn.fetchrow('''
-            INSERT INTO video_queue (url, context, status)
-            VALUES ($1, $2, 'PENDING')
+            INSERT INTO video_queue (url, context, video_index, status)
+            VALUES ($1, $2, $3, 'PENDING')
             RETURNING id
-        ''', url, context)
+        ''', url, context, video_index)
         return record['id']
 
 async def get_pending_video() -> dict | None:
@@ -241,3 +243,14 @@ async def update_video_status(video_id: int, status: str):
         await conn.execute('''
             UPDATE video_queue SET status = $1 WHERE id = $2
         ''', status, video_id)
+
+async def get_recent_videos(limit: int = 20) -> list[dict]:
+    p = await get_pool()
+    async with p.acquire() as conn:
+        records = await conn.fetch('''
+            SELECT id, url, context, video_index, status, created_at
+            FROM video_queue
+            ORDER BY created_at DESC
+            LIMIT $1
+        ''', limit)
+        return [dict(r) for r in records]

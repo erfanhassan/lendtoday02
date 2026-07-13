@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def download_video_and_metadata(url: str, output_id: int) -> dict | None:
+def download_video_and_metadata(url: str, output_id: int, video_index: int = 1) -> dict | None:
     """
     Downloads a video from a given URL using yt-dlp and extracts metadata.
     Saves the video to static/videos/video_{output_id}.mp4.
@@ -16,11 +16,12 @@ def download_video_and_metadata(url: str, output_id: int) -> dict | None:
     video_path_template = os.path.join(output_dir, f"video_{output_id}.%(ext)s")
     
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'best[ext=mp4]/best',
         'outtmpl': video_path_template,
         'quiet': True,
         'no_warnings': True,
-        'merge_output_format': 'mp4'
+        'merge_output_format': 'mp4',
+        'playlist_items': str(video_index)
     }
     
     try:

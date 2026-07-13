@@ -5,13 +5,18 @@ from app.scraper import fetch_5_articles, extract_article_content
 from app.ai import analyze_articles_batch
 from app.image_generator import generate_graphic
 from app.publisher import upload_image_to_facebook, publish_to_instagram
-from app.qa_agent import run_qa_checks
+from app.qa_agent import run_qa_checks, run_video_qa_checks
 from app.config import APP_BASE_URL
 from app.db import (
     is_url_processed, insert_article, update_article_ai_decision,
     mark_article_published, mark_article_publishing, reset_publishing_to_publish,
-    get_unpublished_articles, update_article_qa_status, mark_article_qa_failed
+    get_unpublished_articles, update_article_qa_status, mark_article_qa_failed,
+    get_pending_video, update_video_status
 )
+from app.video_scraper import download_video_and_metadata
+from app.video_processor import apply_video_template
+from app.publisher import publish_video_to_facebook
+from app.ai import generate_video_text
 
 logger = logging.getLogger(__name__)
 
@@ -271,3 +276,79 @@ async def _run_pipeline_inner():
             await asyncio.sleep(5)
 
     logger.info("Pipeline execution completed.")
+
+async def run_video_pipeline():
+    while True:
+        video_req = await get_pending_video()
+        if not video_req:
+            logger.info("No pending video requests to process.")
+            break
+
+        video_id = video_req['id']
+        url = video_req['url']
+        context = video_req.get('context', '')
+        video_index = video_req.get('video_index', 1)
+
+        logger.info(f"Starting video pipeline for request {video_id} (URL: {url}, Index: {video_index})")
+
+        video_meta = await asyncio.to_thread(download_video_and_metadata, url, video_id, video_index)
+        if not video_meta:
+            logger.error(f"Failed to download video {video_id}")
+            await update_video_status(video_id, 'FAILED')
+            continue
+
+        video_path = video_meta['video_path']
+        original_caption = video_meta.get('description', '')
+
+        logger.info(f"Generating AI text for video {video_id}...")
+        ai_text = await generate_video_text(original_caption, context)
+        if not ai_text:
+            logger.error(f"Failed to generate AI text for video {video_id}")
+            await update_video_status(video_id, 'FAILED')
+            continue
+
+        short_title = ai_text.get('short_title', 'Viral Video')
+        caption = ai_text.get('social_media_caption', '')
+        hashtags = ai_text.get('hashtags', '')
+
+        if isinstance(hashtags, list):
+            hashtags = " ".join([h if h.startswith('#') else f"#{h}" for h in hashtags])
+
+        full_caption = f"{caption}\n\n{hashtags}"
+
+        uploader = video_meta.get('uploader', 'Unknown')
+        platform_tag = ""
+        url_lower = url.lower()
+        if "facebook.com" in url_lower or "fb.watch" in url_lower:
+            platform_tag = " @FB"
+        elif "instagram.com" in url_lower:
+            platform_tag = " @IG"
+            
+        full_caption += f"\n\nSource: {uploader}{platform_tag}"
+
+        logger.info(f"Applying video template for video {video_id}...")
+        template_path = "static/video_template.png"
+        credit_text = f"Via {uploader}{platform_tag}"
+        final_video = await asyncio.to_thread(apply_video_template, video_path, template_path, short_title, credit_text, video_id)
+
+        if not final_video:
+            logger.error(f"Failed to apply video template for video {video_id}")
+            await update_video_status(video_id, 'FAILED')
+            continue
+
+        # --- Video QA Agent Check ---
+        qa_result = await run_video_qa_checks(video_id, final_video, full_caption)
+        if not qa_result["passed"]:
+            logger.error(f"Video {video_id} failed QA checks: {qa_result['failures']}. Halting publish.")
+            await update_video_status(video_id, 'FAILED')
+            continue
+
+        logger.info(f"Publishing video {video_id} to Facebook...")
+        success = await publish_video_to_facebook(final_video, full_caption, short_title)
+        
+        if success:
+            logger.info(f"Successfully published video {video_id}!")
+            await update_video_status(video_id, 'PUBLISHED')
+        else:
+            logger.error(f"Failed to publish video {video_id}")
+            await update_video_status(video_id, 'FAILED')

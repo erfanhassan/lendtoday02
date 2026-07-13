@@ -90,9 +90,12 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    from app.db import get_recent_articles, get_recent_videos
     articles = await get_recent_articles(limit=50)
+    videos = await get_recent_videos(limit=20)
     return templates.TemplateResponse(request, "index.html", {
         "articles": articles,
+        "videos": videos,
         "poll_interval_hours": POLL_INTERVAL_HOURS,
     })
 
@@ -114,12 +117,17 @@ async def submit_video(request: Request):
     form_data = await request.form()
     url = form_data.get("url", "").strip()
     context = form_data.get("context", "").strip()
+    video_index_str = form_data.get("video_index", "1").strip()
+    try:
+        video_index = int(video_index_str)
+    except ValueError:
+        video_index = 1
     
     if not url:
         return HTMLResponse("<div class='p-4 bg-red-900/50 text-red-200 border border-red-700 rounded-lg'>Error: URL is required.</div>")
     
     from app.db import insert_video_request
-    await insert_video_request(url, context)
+    await insert_video_request(url, context, video_index)
     
     # We will trigger the background video processor here later
     from app.scheduler import run_video_pipeline
