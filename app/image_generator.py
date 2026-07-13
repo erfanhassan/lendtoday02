@@ -505,7 +505,7 @@ def generate_graphic(article_id: int, decision: dict) -> str:
             sw = draw.textbbox((0, 0), source_text, font=source_font)[2]
         except AttributeError:
             sw, _ = draw.textsize(source_text, font=source_font)
-        _draw_text_with_outline(draw, (1080 - sw - 36, 36), source_text,
+        _draw_text_with_outline(draw, (1080 - sw - 36, 250), source_text,
                                 font=source_font,
                                 fill="#FFFFFF",
                                 outline="#000000",
