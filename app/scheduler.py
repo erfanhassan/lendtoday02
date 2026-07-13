@@ -323,6 +323,8 @@ async def run_video_pipeline():
             platform_tag = " @FB"
         elif "instagram.com" in url_lower:
             platform_tag = " @IG"
+        elif "youtube.com" in url_lower or "youtu.be" in url_lower:
+            platform_tag = " @YT"
             
         full_caption += f"\n\nSource: {uploader}{platform_tag}"
 
