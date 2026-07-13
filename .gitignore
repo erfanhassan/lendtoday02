@@ -2,8 +2,10 @@ venv/
 .env
 __pycache__/
 *.pyc
-*.pyc
 .DS_Store
-.env
 static/images/*.jpg
 !static/images/.gitkeep
+static/videos/*.mp4
+!static/videos/.gitkeep
+*.db
+server.log

@@ -509,15 +509,15 @@ async def run_video_qa_checks(video_id: int, video_path: str, caption: str) -> d
 
     # ── Check 1: Caption Text Check ──────────────────────────────────────────
     # Ensure caption text ends with correct source format
-    if not re.search(r'Source: .* @(?:FB|IG)$', caption.strip()):
-        failures.append("Caption does not end with 'Source: [Account Name] @FB/@IG'")
+    if not re.search(r'Source: .* @(?:FB|IG|YT)$', caption.strip()):
+        failures.append("Caption does not end with 'Source: [Account Name] @FB/@IG/@YT'")
         blocked = True
         logger.error(f"QA Video {video_id}: FAILED — Caption formatting issue.")
 
     # ── Check 2: Video Scaling Check (1080x1920) ─────────────────────────────
     if os.path.exists(video_path):
         try:
-            from moviepy import VideoFileClip
+            from moviepy.editor import VideoFileClip
             with VideoFileClip(video_path) as clip:
                 size = list(clip.size)
                 if size != [1080, 1920]:
