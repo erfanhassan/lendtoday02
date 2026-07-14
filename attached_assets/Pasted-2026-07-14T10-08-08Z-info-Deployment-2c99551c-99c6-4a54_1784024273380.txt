@@ -1,0 +1,155 @@
+2026-07-14T10:08:08Z info: Deployment: 2c99551c-99c6-4a54-8575-cefd05d3ae6b
+2026-07-14T10:08:08Z info: Build: f0ab4b28-8b3d-4493-9919-b848dbb0b07f
+2026-07-14T10:08:11Z info: Running Security Scan
+2026-07-14T10:08:35Z info: Security Scan Complete
+2026-07-14T10:08:39Z info: Preparing development database data
+2026-07-14T10:08:45Z info: Successfully copied development database data to production database
+2026-07-14T10:08:48Z info: Installing packages
+--> pip install -r requirements.txt
+
+Looking in indexes: http://package-firewall.replit.local/pypi/simple/
+
+Requirement already satisfied: apscheduler in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 1)) (3.11.3)
+
+Requirement already satisfied: asyncpg in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 2)) (0.31.0)
+
+Requirement already satisfied: duckduckgo-search in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 3)) (8.1.1)
+
+Requirement already satisfied: fastapi in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 4)) (0.139.0)
+
+Requirement already satisfied: feedparser in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 5)) (6.0.12)
+
+Requirement already satisfied: gunicorn in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 6)) (26.0.0)
+
+Requirement already satisfied: httpx in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 7)) (0.28.1)
+
+Requirement already satisfied: jinja2 in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 8)) (3.1.6)
+
+Requirement already satisfied: moviepy in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 10)) (2.2.1)
+
+Requirement already satisfied: newspaper3k in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 11)) (0.2.8)
+
+Requirement already satisfied: openai in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 12)) (2.45.0)
+
+Requirement already satisfied: Pillow in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 13)) (11.3.0)
+
+Requirement already satisfied: python-dotenv in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 14)) (1.2.2)
+
+Requirement already satisfied: python-multipart in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 15)) (0.0.32)
+
+Requirement already satisfied: requests in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 16)) (2.34.2)
+
+Requirement already satisfied: starlette in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 17)) (1.3.1)
+
+Requirement already satisfied: uvicorn in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 18)) (0.51.0)
+
+Requirement already satisfied: yt-dlp in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 19)) (2026.7.4)
+
+Requirement already satisfied: lxml[html_clean] in ./.pythonlibs/lib/python3.12/site-packages (from -r requirements.txt (line 9)) (6.1.1)
+
+Requirement already satisfied: tzlocal>=3.0 in ./.pythonlibs/lib/python3.12/site-packages (from apscheduler->-r requirements.txt (line 1)) (5.4.4)
+
+Requirement already satisfied: click>=8.1.8 in ./.pythonlibs/lib/python3.12/site-packages (from duckduckgo-search->-r requirements.txt (line 3)) (8.4.2)
+
+Requirement already satisfied: primp>=0.15.0 in ./.pythonlibs/lib/python3.12/site-packages (from duckduckgo-search->-r requirements.txt (line 3)) (1.3.1)
+
+Requirement already satisfied: pydantic>=2.9.0 in ./.pythonlibs/lib/python3.12/site-packages (from fastapi->-r requirements.txt (line 4)) (2.13.4)
+
+Requirement already satisfied: typing-extensions>=4.8.0 in ./.pythonlibs/lib/python3.12/site-packages (from fastapi->-r requirements.txt (line 4)) (4.16.0)
+
+Requirement already satisfied: typing-inspection>=0.4.2 in ./.pythonlibs/lib/python3.12/site-packages (from fastapi->-r requirements.txt (line 4)) (0.4.2)
+
+Requirement already satisfied: annotated-doc>=0.0.2 in ./.pythonlibs/lib/python3.12/site-packages (from fastapi->-r requirements.txt (line 4)) (0.0.4)
+
+Requirement already satisfied: sgmllib3k in ./.pythonlibs/lib/python3.12/site-packages (from feedparser->-r requirements.txt (line 5)) (1.0.0)
+
+Requirement already satisfied: packaging in ./.pythonlibs/lib/python3.12/site-packages (from gunicorn->-r requirements.txt (line 6)) (26.2)
+
+Requirement already satisfied: anyio in ./.pythonlibs/lib/python3.12/site-packages (from httpx->-r requirements.txt (line 7)) (4.14.2)
+
+Requirement already satisfied: certifi in ./.pythonlibs/lib/python3.12/site-packages (from httpx->-r requirements.txt (line 7)) (2026.6.17)
+
+Requirement already satisfied: httpcore==1.* in ./.pythonlibs/lib/python3.12/site-packages (from httpx->-r requirements.txt (line 7)) (1.0.9)
+
+Requirement already satisfied: idna in ./.pythonlibs/lib/python3.12/site-packages (from httpx->-r requirements.txt (line 7)) (3.18)
+
+Requirement already satisfied: h11>=0.16 in ./.pythonlibs/lib/python3.12/site-packages (from httpcore==1.*->httpx->-r requirements.txt (line 7)) (0.16.0)
+
+Requirement already satisfied: MarkupSafe>=2.0 in ./.pythonlibs/lib/python3.12/site-packages (from jinja2->-r requirements.txt (line 8)) (3.0.3)
+
+Requirement already satisfied: lxml_html_clean in ./.pythonlibs/lib/python3.12/site-packages (from lxml[html_clean]->-r requirements.txt (line 9)) (0.4.5)
+
+Requirement already satisfied: decorator<6.0,>=4.0.2 in ./.pythonlibs/lib/python3.12/site-packages (from moviepy->-r requirements.txt (line 10)) (5.3.1)
+
+Requirement already satisfied: imageio<3.0,>=2.5 in ./.pythonlibs/lib/python3.12/site-packages (from moviepy->-r requirements.txt (line 10)) (2.37.3)
+
+Requirement already satisfied: imageio_ffmpeg>=0.2.0 in ./.pythonlibs/lib/python3.12/site-packages (from moviepy->-r requirements.txt (line 10)) (0.6.0)
+
+Requirement already satisfied: numpy>=1.25.0 in ./.pythonlibs/lib/python3.12/site-packages (from moviepy->-r requirements.txt (line 10)) (2.5.1)
+
+Requirement already satisfied: proglog<=1.0.0 in ./.pythonlibs/lib/python3.12/site-packages (from moviepy->-r requirements.txt (line 10)) (0.1.12)
+
+Requirement already satisfied: beautifulsoup4>=4.4.1 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (4.15.0)
+
+Requirement already satisfied: PyYAML>=3.11 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (6.0.3)
+
+Requirement already satisfied: cssselect>=0.9.2 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (1.4.0)
+
+Requirement already satisfied: nltk>=3.2.1 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (3.10.0)
+
+Requirement already satisfied: tldextract>=2.0.1 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (5.3.1)
+
+Requirement already satisfied: feedfinder2>=0.0.4 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (0.0.4)
+
+Requirement already satisfied: jieba3k>=0.35.1 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (0.35.1)
+
+Requirement already satisfied: python-dateutil>=2.5.3 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (2.9.0.post0)
+
+Requirement already satisfied: tinysegmenter==0.3 in ./.pythonlibs/lib/python3.12/site-packages (from newspaper3k->-r requirements.txt (line 11)) (0.3)
+
+Requirement already satisfied: distro<2,>=1.7.0 in ./.pythonlibs/lib/python3.12/site-packages (from openai->-r requirements.txt (line 12)) (1.9.0)
+
+Requirement already satisfied: jiter<1,>=0.10.0 in ./.pythonlibs/lib/python3.12/site-packages (from openai->-r requirements.txt (line 12)) (0.16.0)
+
+Requirement already satisfied: sniffio in ./.pythonlibs/lib/python3.12/site-packages (from openai->-r requirements.txt (line 12)) (1.3.1)
+
+Requirement already satisfied: tqdm>4 in ./.pythonlibs/lib/python3.12/site-packages (from openai->-r requirements.txt (line 12)) (4.68.4)
+
+Requirement already satisfied: charset_normalizer<4,>=2 in ./.pythonlibs/lib/python3.12/site-packages (from requests->-r requirements.txt (line 16)) (3.4.9)
+
+Requirement already satisfied: urllib3<3,>=1.26 in ./.pythonlibs/lib/python3.12/site-packages (from requests->-r requirements.txt (line 16)) (2.7.0)
+
+Requirement already satisfied: soupsieve>=1.6.1 in ./.pythonlibs/lib/python3.12/site-packages (from beautifulsoup4>=4.4.1->newspaper3k->-r requirements.txt (line 11)) (2.8.4)
+
+Requirement already satisfied: six in ./.pythonlibs/lib/python3.12/site-packages (from feedfinder2>=0.0.4->newspaper3k->-r requirements.txt (line 11)) (1.17.0)
+
+Requirement already satisfied: defusedxml in ./.pythonlibs/lib/python3.12/site-packages (from nltk>=3.2.1->newspaper3k->-r requirements.txt (line 11)) (0.7.1)
+
+Requirement already satisfied: joblib in ./.pythonlibs/lib/python3.12/site-packages (from nltk>=3.2.1->newspaper3k->-r requirements.txt (line 11)) (1.5.3)
+
+Requirement already satisfied: regex>=2021.8.3 in ./.pythonlibs/lib/python3.12/site-packages (from nltk>=3.2.1->newspaper3k->-r requirements.txt (line 11)) (2026.7.10)
+
+Requirement already satisfied: annotated-types>=0.6.0 in ./.pythonlibs/lib/python3.12/site-packages (from pydantic>=2.9.0->fastapi->-r requirements.txt (line 4)) (0.7.0)
+
+Requirement already satisfied: pydantic-core==2.46.4 in ./.pythonlibs/lib/python3.12/site-packages (from pydantic>=2.9.0->fastapi->-r requirements.txt (line 4)) (2.46.4)
+
+Requirement already satisfied: requests-file>=1.4 in ./.pythonlibs/lib/python3.12/site-packages (from tldextract>=2.0.1->newspaper3k->-r requirements.txt (line 11)) (3.0.1)
+
+Requirement already satisfied: filelock>=3.0.8 in ./.pythonlibs/lib/python3.12/site-packages (from tldextract>=2.0.1->newspaper3k->-r requirements.txt (line 11)) (3.29.7)
+
+2026-07-14T10:08:51Z info: Skipping Build as no Build command set
+2026-07-14T10:08:52Z info: Pushing pid1 binary layer...
+2026-07-14T10:09:06Z info: Pushing hosting layer...
+2026-07-14T10:09:06Z info: Pushing Repl layer...
+2026-07-14T10:09:07Z info: Retrieved cached nix layer
+2026-07-14T10:09:10Z info: Created hosting layer
+2026-07-14T10:09:20Z info: Created pid1 binary layer
+2026-07-14T10:10:21Z info: Created Repl layer
+2026-07-14T10:10:21Z info: Pushing Repl (cache) layer...
+2026-07-14T10:10:22Z info: Created Repl (cache) layer
+2026-07-14T10:10:32Z info: Pushed image manifest
+2026-07-14T10:10:36Z info: Pushed soci index manifest
+2026-07-14T10:10:36Z info: Pushed referrer manifest
+2026-07-14T10:10:44Z info: Creating virtual machine
+2026-07-14T10:11:23Z info: Virtual machine created
+2026-07-14T10:11:23Z info: Waiting for deployment to be ready
