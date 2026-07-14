@@ -44,7 +44,7 @@ run = ["sh", "-c", "pip install -r requirements.txt && uvicorn main:app --host 0
 deploymentTarget = "vm"
 
 [[deployment.healthChecks]]
-path = "/next-run"
+path = "/healthz"
 initialDelaySeconds = 120
 periodSeconds = 15
 timeoutSeconds = 10

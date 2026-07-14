@@ -37,8 +37,8 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         if not _AUTH_ENABLED:
             return await call_next(request)
 
-        # Allow static files and health-check endpoint through without auth
-        if request.url.path.startswith("/static/") or request.url.path == "/next-run":
+        # Allow static files and health-check endpoints through without auth
+        if request.url.path.startswith("/static/") or request.url.path in ("/next-run", "/healthz"):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
@@ -224,6 +224,12 @@ async def submit_video(request: Request):
     asyncio.create_task(run_video_pipeline())
     
     return HTMLResponse("<div class='p-4 bg-green-900/50 text-green-200 border border-green-700 rounded-lg'>✅ Video queued successfully! Processing will begin in the background.</div>")
+
+
+@app.get("/healthz")
+async def healthz():
+    """Public health endpoint used by the deployment startup probe — no auth required."""
+    return {"status": "ok"}
 
 
 @app.get("/next-run")
