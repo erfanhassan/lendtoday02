@@ -46,6 +46,7 @@ Add these in the Replit Secrets pane before the pipeline will fully work:
 | `DASHBOARD_PASSWORD` | _(none)_ | HTTP Basic Auth password for dashboard |
 | `POLL_INTERVAL_MINUTES` | `480` | How often the pipeline runs (minutes) |
 | `APP_BASE_URL` | auto-detected | Public base URL used for serving images to Instagram |
+| `YOUTUBE_COOKIES` | _(none)_ | Netscape-format cookies.txt from a logged-in YouTube browser session — required for YouTube downloads (bot detection blocks server IPs without cookies) |
 
 Without `DEEPSEEK_API_KEY` the AI step will fail silently and articles won't advance past PENDING. Without Meta credentials posts won't be published but the dashboard and scraper will still work.
 

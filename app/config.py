@@ -98,3 +98,9 @@ APP_BASE_URL = _build_app_base_url()
 # If not set, the dashboard is accessible without authentication (dev mode).
 DASHBOARD_USERNAME = os.environ.get("DASHBOARD_USERNAME", "")
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
+
+# --- YOUTUBE COOKIES ---
+# Paste the full Netscape-format cookies.txt content (exported from your browser
+# while logged in to YouTube) into this secret. Required to bypass YouTube's
+# bot-detection on server IPs.
+YOUTUBE_COOKIES = os.environ.get("YOUTUBE_COOKIES", "")
