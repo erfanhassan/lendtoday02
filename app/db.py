@@ -8,9 +8,21 @@ pool = None
 
 async def init_db():
     global pool
-    logger.info("Initializing database connection pool...")
+    # Log the DB host (sanitized) to help diagnose connection issues
     try:
-        pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+        from urllib.parse import urlparse
+        _parsed = urlparse(DATABASE_URL)
+        logger.info(f"Initializing database connection pool → {_parsed.hostname}:{_parsed.port or 5432}/{_parsed.path.lstrip('/')}")
+    except Exception:
+        logger.info("Initializing database connection pool...")
+    try:
+        pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=10,
+            timeout=10,          # seconds to wait for a connection from the pool
+            command_timeout=15,  # seconds before a query times out
+        )
         async with pool.acquire() as conn:
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS articles (

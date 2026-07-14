@@ -32,8 +32,8 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         if not _AUTH_ENABLED:
             return await call_next(request)
 
-        # Allow static files through without auth (needed for Instagram image serving)
-        if request.url.path.startswith("/static/"):
+        # Allow static files and health-check endpoint through without auth
+        if request.url.path.startswith("/static/") or request.url.path == "/next-run":
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
@@ -58,24 +58,37 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up Lens Today application...")
-    await init_db()
 
-    # Reset any articles stuck in PUBLISHING from a previous crash
-    reset_count = await reset_stale_publishing_articles()
-    if reset_count:
-        logger.info(f"Startup: reset {reset_count} stale PUBLISHING article(s) back to PUBLISH.")
+    db_ready = False
+    try:
+        await init_db()
+        db_ready = True
+    except Exception as e:
+        logger.error(
+            f"DATABASE UNAVAILABLE — server will start but pipeline is disabled: {e}"
+        )
 
-    scheduler.add_job(run_pipeline, 'interval', minutes=POLL_INTERVAL_MINUTES)
-    scheduler.start()
+    if db_ready:
+        # Reset any articles stuck in PUBLISHING from a previous crash
+        reset_count = await reset_stale_publishing_articles()
+        if reset_count:
+            logger.info(f"Startup: reset {reset_count} stale PUBLISHING article(s) back to PUBLISH.")
 
-    import asyncio
-    asyncio.create_task(run_pipeline())
+        scheduler.add_job(run_pipeline, 'interval', minutes=POLL_INTERVAL_MINUTES)
+        scheduler.start()
+
+        import asyncio
+        asyncio.create_task(run_pipeline())
+    else:
+        logger.warning("Scheduler NOT started — database is not connected.")
 
     yield
 
     logger.info("Shutting down...")
-    scheduler.shutdown()
-    await close_db()
+    if scheduler.running:
+        scheduler.shutdown()
+    if db_ready:
+        await close_db()
 
 
 app = FastAPI(title="Lens Today Dashboard", lifespan=lifespan)

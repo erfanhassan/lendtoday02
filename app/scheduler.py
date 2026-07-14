@@ -15,7 +15,7 @@ from app.db import (
 )
 from app.video_scraper import download_video_and_metadata
 from app.video_processor import apply_video_template
-from app.publisher import publish_video_to_facebook
+from app.publisher import publish_video_to_facebook, publish_video_to_instagram
 from app.ai import generate_video_text
 
 logger = logging.getLogger(__name__)
@@ -346,9 +346,18 @@ async def run_video_pipeline():
             continue
 
         logger.info(f"Publishing video {video_id} to Facebook...")
-        success = await publish_video_to_facebook(final_video, full_caption, short_title)
-        
-        if success:
+        fb_success = await publish_video_to_facebook(final_video, full_caption, short_title)
+
+        ig_success = False
+        if APP_BASE_URL:
+            video_url = f"{APP_BASE_URL}/static/videos/final_{video_id}.mp4"
+            logger.info(f"Publishing video {video_id} to Instagram Reels...")
+            await asyncio.sleep(3)
+            ig_success = await publish_video_to_instagram(video_url, full_caption)
+        else:
+            logger.warning("APP_BASE_URL not set — skipping Instagram video (needs public URL).")
+
+        if fb_success or ig_success:
             logger.info(f"Successfully published video {video_id}!")
             await update_video_status(video_id, 'PUBLISHED')
         else:

@@ -40,7 +40,27 @@ ENTERTAINMENT_KEYWORDS = [
 # --- ENVIRONMENT VARIABLES ---
 
 # PostgreSQL
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://user:password@localhost/lens_today")
+# Priority: explicit DATABASE_URL env var > Replit-provisioned PG* vars > local fallback
+def _build_database_url() -> str:
+    """Resolve the database connection URL, supporting Replit's auto-provisioned PostgreSQL."""
+    explicit = os.environ.get("DATABASE_URL")
+    if explicit:
+        return explicit
+
+    # Replit's postgresql-16 module sets individual PG* environment variables
+    pg_host = os.environ.get("PGHOST")
+    pg_port = os.environ.get("PGPORT", "5432")
+    pg_user = os.environ.get("PGUSER")
+    pg_password = os.environ.get("PGPASSWORD")
+    pg_database = os.environ.get("PGDATABASE")
+
+    if pg_host and pg_user and pg_database:
+        password_part = f":{pg_password}" if pg_password else ""
+        return f"postgresql://{pg_user}{password_part}@{pg_host}:{pg_port}/{pg_database}"
+
+    return "postgresql://user:password@localhost/lens_today"
+
+DATABASE_URL = _build_database_url()
 
 # DeepSeek AI
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -54,9 +74,24 @@ META_IG_ACCOUNT_ID = os.environ.get("META_IG_ACCOUNT_ID", "")
 # Posting schedule: every 8 hours, 5 posts per session.
 POLL_INTERVAL_MINUTES = int(os.environ.get("POLL_INTERVAL_MINUTES", "480"))
 
-# Public base URL (used to serve images to Instagram)
-_replit_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
-APP_BASE_URL = os.environ.get("APP_BASE_URL", f"https://{_replit_domain}" if _replit_domain else "")
+# Public base URL (used to serve images/videos to Instagram)
+def _build_app_base_url() -> str:
+    """Resolve the public base URL, supporting both Replit dev and production."""
+    explicit = os.environ.get("APP_BASE_URL")
+    if explicit:
+        return explicit
+    # Development workspace
+    dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    if dev_domain:
+        return f"https://{dev_domain}"
+    # Production deploy — REPLIT_DOMAINS is a comma-separated list
+    prod_domains = os.environ.get("REPLIT_DOMAINS", "")
+    if prod_domains:
+        first_domain = prod_domains.split(",")[0].strip()
+        return f"https://{first_domain}"
+    return ""
+
+APP_BASE_URL = _build_app_base_url()
 
 # --- DASHBOARD AUTH ---
 # Set DASHBOARD_USERNAME and DASHBOARD_PASSWORD in Secrets to protect the dashboard.

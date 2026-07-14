@@ -9,6 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
+os.makedirs("static/videos", exist_ok=True)
+
 def _create_text_overlay(width: int, height: int, title: str, credit_text: str) -> str:
     """
     Creates a transparent PNG with the title at the top center and credit at the bottom right.
@@ -17,13 +19,24 @@ def _create_text_overlay(width: int, height: int, title: str, credit_text: str) 
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Try to load a font, fallback to default
-    try:
-        title_font = ImageFont.truetype("Arial.ttf", 60)
-        credit_font = ImageFont.truetype("Arial.ttf", 40)
-    except Exception:
-        title_font = ImageFont.load_default()
-        credit_font = ImageFont.load_default()
+    # Try to load a font from system paths, fallback to default
+    FONT_PATHS = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/HelveticaNeue.ttc",
+    ]
+    title_font = ImageFont.load_default()
+    credit_font = ImageFont.load_default()
+    for path in FONT_PATHS:
+        if os.path.exists(path):
+            try:
+                title_font = ImageFont.truetype(path, 60)
+                credit_font = ImageFont.truetype(path, 40)
+                break
+            except Exception:
+                continue
 
     # Draw Title (Bottom Center)
     if title:

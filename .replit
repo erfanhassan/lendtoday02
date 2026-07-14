@@ -38,3 +38,13 @@ externalPort = 80
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 60000
+
+[deployment]
+run = ["sh", "-c", "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 5000"]
+deploymentTarget = "autoscale"
+
+[[deployment.healthChecks]]
+path = "/next-run"
+initialDelaySeconds = 10
+periodSeconds = 10
+timeoutSeconds = 5
