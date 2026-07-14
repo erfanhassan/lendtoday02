@@ -11,7 +11,7 @@ from app.db import (
     is_url_processed, insert_article, update_article_ai_decision,
     mark_article_published, mark_article_publishing, reset_publishing_to_publish,
     get_unpublished_articles, update_article_qa_status, mark_article_qa_failed,
-    get_pending_video, update_video_status
+    get_pending_video, update_video_status, store_publishing_post_ids,
 )
 from app.video_scraper import download_video_and_metadata
 from app.video_processor import apply_video_template
@@ -27,19 +27,24 @@ def _build_image_url(article_id: int) -> str:
     return f"{APP_BASE_URL}/static/images/article_{article_id}.jpg"
 
 
-async def _publish_to_all(article_id: int, image_path: str, caption: str) -> bool:
+async def _publish_to_all(article_id: int, image_path: str, caption: str) -> tuple[str | None, str | None]:
+    """
+    Publish to Facebook and Instagram.
+    Returns (ig_post_id, fb_post_id) — either may be None if that platform failed.
+    At least one will be non-None on overall success.
+    """
     image_url = _build_image_url(article_id)
 
-    fb_success = await upload_image_to_facebook(image_path, caption)
+    fb_post_id = await upload_image_to_facebook(image_path, caption)
     await asyncio.sleep(3)
 
-    ig_success = False
+    ig_post_id = None
     if APP_BASE_URL:
-        ig_success = await publish_to_instagram(image_url, caption)
+        ig_post_id = await publish_to_instagram(image_url, caption)
     else:
         logger.warning("APP_BASE_URL not set — skipping Instagram (needs public URL).")
 
-    return fb_success or ig_success
+    return ig_post_id, fb_post_id
 
 
 async def _run_qa_and_publish(article_id: int, image_path: str, caption: str,
@@ -81,26 +86,63 @@ async def _run_qa_and_publish(article_id: int, image_path: str, caption: str,
 
     logger.info(f"QA {qa_result['status']} for article {article_id}. Proceeding to publish.")
     try:
-        success = await _publish_to_all(article_id, verified_image_path, verified_caption)
+        ig_post_id, fb_post_id = await _publish_to_all(article_id, verified_image_path, verified_caption)
     except Exception as e:
         logger.error(f"Publish error for article {article_id}: {e}")
         await reset_publishing_to_publish(article_id)
         return False
 
-    if success:
+    if ig_post_id or fb_post_id:
+        # ── Step 1: Persist post IDs immediately while still PUBLISHING ───────
+        # Writing the IDs before the status flip is intentional: if the process
+        # crashes between the Meta API return and the PUBLISHED transition, the
+        # IDs will already be in the DB so startup verification can confirm the
+        # post exists instead of blindly re-queuing.
+        #
+        # Retry with backoff — a transient DB hiccup must not leave the article
+        # in an unverifiable state (no IDs + PUBLISHING = potential duplicate on
+        # next restart).
+        id_stored = False
+        for attempt in range(1, 4):   # up to 3 attempts
+            try:
+                await store_publishing_post_ids(article_id, ig_post_id, fb_post_id)
+                id_stored = True
+                break
+            except Exception as e:
+                wait = 2 ** attempt   # 2 s, 4 s, 8 s
+                logger.warning(
+                    f"Article {article_id}: ID storage attempt {attempt} failed ({e}). "
+                    f"Retrying in {wait}s…"
+                )
+                await asyncio.sleep(wait)
+
+        if not id_stored:
+            # All retries exhausted — the post is live but IDs couldn't be stored.
+            # Leave in PUBLISHING (NOT reverted) so startup verification treats this
+            # as "unknown" and does NOT requeue, avoiding a duplicate post.
+            logger.error(
+                f"Article {article_id}: CRITICAL — published on Meta but could not store "
+                f"post IDs after 3 attempts. ig={ig_post_id} fb={fb_post_id}. "
+                f"Left in PUBLISHING for manual review; will not be requeued automatically."
+            )
+            return True  # post did go live; caller should not reset to PUBLISH
+
+        # ── Step 2: Flip status to PUBLISHED ─────────────────────────────────
         try:
-            await mark_article_published(article_id)
-            logger.info(f"Article {article_id} marked as PUBLISHED in DB.")
+            await mark_article_published(article_id, ig_post_id, fb_post_id)
+            logger.info(
+                f"Article {article_id} marked as PUBLISHED "
+                f"(ig={ig_post_id} fb={fb_post_id})."
+            )
         except Exception as e:
             logger.error(
-                f"Article {article_id} was posted successfully but DB mark failed: {e}. "
-                f"Resetting to PUBLISH so it won't be re-posted (QA will block duplicate)."
+                f"Article {article_id} posted and IDs stored, but final status flip failed: {e}. "
+                f"Leaving in PUBLISHING — startup verification will confirm and recover."
             )
-            await reset_publishing_to_publish(article_id)
     else:
         await reset_publishing_to_publish(article_id)
 
-    return success
+    return bool(ig_post_id or fb_post_id)
 
 
 async def run_pipeline():

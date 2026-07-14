@@ -65,6 +65,8 @@ async def init_db():
                 "ALTER TABLE articles ADD COLUMN qa_status VARCHAR(20);",
                 'ALTER TABLE articles ADD COLUMN qa_notes TEXT;',
                 'ALTER TABLE video_queue ADD COLUMN video_index INTEGER DEFAULT 1;',
+                'ALTER TABLE articles ADD COLUMN meta_post_id VARCHAR(200);',
+                'ALTER TABLE articles ADD COLUMN fb_post_id VARCHAR(200);',
             ]:
                 try:
                     await conn.execute(col_def)
@@ -146,14 +148,33 @@ async def mark_article_publishing(article_id: int) -> bool:
         ''', article_id)
         return result == 'UPDATE 1'
 
-async def mark_article_published(article_id: int):
+async def store_publishing_post_ids(article_id: int, ig_post_id: str = None, fb_post_id: str = None):
+    """
+    Persist the Meta post IDs immediately after the API call succeeds, while the
+    article is still in PUBLISHING state.  Writing the IDs as a separate step —
+    before the status transition — means that if the process crashes between the
+    Meta API return and the final DB update, startup verification can still find
+    the IDs and confirm the post exists rather than blindly re-queuing.
+    """
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute('''
             UPDATE articles
-            SET status = 'PUBLISHED', published_at = NOW()
+            SET meta_post_id = COALESCE($2, meta_post_id),
+                fb_post_id   = COALESCE($3, fb_post_id)
+            WHERE id = $1 AND status = 'PUBLISHING'
+        ''', article_id, ig_post_id, fb_post_id)
+
+async def mark_article_published(article_id: int, ig_post_id: str = None, fb_post_id: str = None):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        await conn.execute('''
+            UPDATE articles
+            SET status = 'PUBLISHED', published_at = NOW(),
+                meta_post_id = COALESCE($2, meta_post_id),
+                fb_post_id   = COALESCE($3, fb_post_id)
             WHERE id = $1
-        ''', article_id)
+        ''', article_id, ig_post_id, fb_post_id)
 
 async def reset_publishing_to_publish(article_id: int):
     """Roll back PUBLISHING → PUBLISH so retry logic can pick it up."""
@@ -165,21 +186,36 @@ async def reset_publishing_to_publish(article_id: int):
             WHERE id = $1 AND status = 'PUBLISHING'
         ''', article_id)
 
-async def reset_stale_publishing_articles() -> int:
+async def get_stale_publishing_articles() -> list[dict]:
     """
-    On startup, reset any articles left in PUBLISHING (from a previous crash)
-    back to PUBLISH so the retry loop can pick them up.
-    Returns the number of articles reset.
+    Return all articles currently stuck in PUBLISHING state (from a previous crash).
     """
     p = await get_pool()
     async with p.acquire() as conn:
-        result = await conn.execute('''
-            UPDATE articles
-            SET status = 'PUBLISH'
+        records = await conn.fetch('''
+            SELECT id, meta_post_id, fb_post_id
+            FROM articles
             WHERE status = 'PUBLISHING'
         ''')
-        parts = result.split()
-        return int(parts[1]) if len(parts) >= 2 else 0
+        return [dict(r) for r in records]
+
+async def reset_publishing_article_to_publish(article_id: int):
+    """Mark a single PUBLISHING article back to PUBLISH (truly stale — never actually sent)."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        await conn.execute('''
+            UPDATE articles SET status = 'PUBLISH' WHERE id = $1 AND status = 'PUBLISHING'
+        ''', article_id)
+
+async def confirm_publishing_article_published(article_id: int):
+    """Mark a PUBLISHING article as PUBLISHED once confirmed via Meta API."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        await conn.execute('''
+            UPDATE articles
+            SET status = 'PUBLISHED', published_at = NOW()
+            WHERE id = $1 AND status = 'PUBLISHING'
+        ''', article_id)
 
 async def get_unpublished_articles():
     """

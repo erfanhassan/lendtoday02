@@ -11,7 +11,12 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.db import init_db, close_db, get_recent_articles, reset_stale_publishing_articles
+from app.db import (
+    init_db, close_db, get_recent_articles,
+    get_stale_publishing_articles,
+    confirm_publishing_article_published,
+    reset_publishing_article_to_publish,
+)
 from app.scheduler import run_pipeline
 from app.config import POLL_INTERVAL_MINUTES, DASHBOARD_USERNAME, DASHBOARD_PASSWORD
 
@@ -69,10 +74,81 @@ async def lifespan(app: FastAPI):
         )
 
     if db_ready:
-        # Reset any articles stuck in PUBLISHING from a previous crash
-        reset_count = await reset_stale_publishing_articles()
-        if reset_count:
-            logger.info(f"Startup: reset {reset_count} stale PUBLISHING article(s) back to PUBLISH.")
+        # Verify articles stuck in PUBLISHING against the Meta API before deciding what to do.
+        # If the post was actually sent, mark it PUBLISHED. If not, revert to PUBLISH for retry.
+        stale = await get_stale_publishing_articles()
+        if stale:
+            from app.publisher import verify_meta_post_exists
+            confirmed = 0
+            reverted = 0
+            left_unknown = 0
+            for article in stale:
+                article_id = article['id']
+                ig_post_id = article.get('meta_post_id')   # stored as meta_post_id in DB
+                fb_post_id = article.get('fb_post_id')
+
+                # IDs are written to the DB immediately after the Meta API call
+                # (before the status flip to PUBLISHED), so a non-null ID means
+                # publishing was at least attempted — verify whether it landed.
+                #
+                # verify_meta_post_exists returns a tri-state:
+                #   "confirmed"  → mark PUBLISHED (post is live)
+                #   "not_found"  → revert to PUBLISH (safe to retry)
+                #   "unknown"    → leave in PUBLISHING (transient error; retry next restart)
+                #
+                # Articles with NO stored IDs are also "unknown": we cannot prove the
+                # post didn't go live, so we must NOT requeue — leave in PUBLISHING
+                # for manual review rather than risk a duplicate.
+
+                # Verify each platform independently so that a "not_found" on one
+                # platform cannot mask a live post on the other.
+                ig_state = await verify_meta_post_exists(ig_post_id) if ig_post_id else None
+                fb_state = await verify_meta_post_exists(fb_post_id) if fb_post_id else None
+
+                logger.info(
+                    f"Startup: article {article_id} verification — "
+                    f"ig={ig_post_id}({ig_state}) fb={fb_post_id}({fb_state})"
+                )
+
+                states = {s for s in (ig_state, fb_state) if s is not None}
+
+                # Decision rules (evaluated in priority order):
+                #   1. Any platform confirmed → post is live → mark PUBLISHED.
+                #   2. All checked platforms say not_found (and at least one was checked)
+                #      → post never landed → safe to revert to PUBLISH.
+                #   3. Any unknown (error/timeout/no IDs) → cannot be sure → leave in
+                #      PUBLISHING; do NOT requeue to avoid a potential duplicate.
+                if "confirmed" in states:
+                    await confirm_publishing_article_published(article_id)
+                    logger.info(
+                        f"Startup: article {article_id} confirmed live — marked PUBLISHED."
+                    )
+                    confirmed += 1
+                elif states and states <= {"not_found"}:
+                    # Every ID we have was explicitly not found — safe to retry.
+                    await reset_publishing_article_to_publish(article_id)
+                    logger.info(
+                        f"Startup: article {article_id} not found on Meta — reverted to PUBLISH."
+                    )
+                    reverted += 1
+                else:
+                    # No IDs stored, or at least one platform returned "unknown"
+                    # (transient error / timeout). Do NOT requeue — leave in PUBLISHING.
+                    logger.warning(
+                        f"Startup: article {article_id} state unresolvable — "
+                        f"left in PUBLISHING; manual review may be needed."
+                    )
+                    left_unknown += 1
+
+            summary_parts = []
+            if confirmed:
+                summary_parts.append(f"{confirmed} confirmed PUBLISHED")
+            if reverted:
+                summary_parts.append(f"{reverted} reverted to PUBLISH")
+            if left_unknown:
+                summary_parts.append(f"{left_unknown} left in PUBLISHING (unknown state)")
+            if summary_parts:
+                logger.info(f"Startup recovery: {', '.join(summary_parts)}.")
 
         scheduler.add_job(run_pipeline, 'interval', minutes=POLL_INTERVAL_MINUTES)
         scheduler.start()
