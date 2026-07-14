@@ -4,7 +4,7 @@ import PIL.Image
 if not hasattr(PIL.Image, 'ANTIALIAS'):
     PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
 
-from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
+from moviepy import VideoFileClip, ImageClip, CompositeVideoClip
 from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
@@ -87,12 +87,12 @@ def apply_video_template(video_path: str, template_path: str, title: str, credit
         
         # Zoom to fill: Scale up while preserving aspect ratio
         if video_ratio > target_ratio:
-            video_clip = video_clip.resize(height=target_h)
+            video_clip = video_clip.resized(height=target_h)
         else:
-            video_clip = video_clip.resize(width=target_w)
+            video_clip = video_clip.resized(width=target_w)
             
         # Crop center to strictly fit 1080x1920
-        video_clip = video_clip.crop(
+        video_clip = video_clip.cropped(
             x_center=video_clip.w / 2, 
             y_center=video_clip.h / 2, 
             width=target_w, 
@@ -100,23 +100,23 @@ def apply_video_template(video_path: str, template_path: str, title: str, credit
         )
         
         # Place video in center
-        video_clip = video_clip.set_position("center")
+        video_clip = video_clip.with_position("center")
         
         clips = [video_clip]
         
         # Add template overlay if it exists
         if os.path.exists(template_path):
-            template_clip = ImageClip(template_path).set_duration(video_clip.duration)
+            template_clip = ImageClip(template_path).with_duration(video_clip.duration)
             if template_clip.size != (target_w, target_h):
-                template_clip = template_clip.resize(newsize=(target_w, target_h))
-            template_clip = template_clip.set_position("center")
+                template_clip = template_clip.resized(newsize=(target_w, target_h))
+            template_clip = template_clip.with_position("center")
             clips.append(template_clip)
         else:
             logger.warning(f"Template not found at {template_path}, skipping template overlay.")
 
         # Create and add text overlay
         text_overlay_path = _create_text_overlay(target_w, target_h, title, credit_text)
-        text_clip = ImageClip(text_overlay_path).set_duration(video_clip.duration).set_position("center")
+        text_clip = ImageClip(text_overlay_path).with_duration(video_clip.duration).with_position("center")
         clips.append(text_clip)
 
         # Composite everything on a 1080x1920 canvas

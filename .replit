@@ -1,4 +1,4 @@
-modules = ["python-3.12", "web", "bash"]
+modules = ["python-3.12", "web", "bash", "postgresql-16"]
 run = "uvicorn main:app --host 0.0.0.0 --port 5000"
 [agent]
 expertMode = true
@@ -41,7 +41,7 @@ timeoutMs = 60000
 
 [deployment]
 run = ["sh", "-c", "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 5000"]
-deploymentTarget = "autoscale"
+deploymentTarget = "cloudrun"
 
 [[deployment.healthChecks]]
 path = "/next-run"

@@ -517,7 +517,7 @@ async def run_video_qa_checks(video_id: int, video_path: str, caption: str) -> d
     # ── Check 2: Video Scaling Check (1080x1920) ─────────────────────────────
     if os.path.exists(video_path):
         try:
-            from moviepy.editor import VideoFileClip
+            from moviepy import VideoFileClip
             with VideoFileClip(video_path) as clip:
                 size = list(clip.size)
                 if size != [1080, 1920]:
