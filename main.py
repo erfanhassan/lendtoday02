@@ -1,9 +1,12 @@
+import secrets
+import hashlib
+import hmac as _hmac
 import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request, HTTPException, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -15,7 +18,7 @@ from app.db import (
     reset_publishing_article_to_publish,
 )
 from app.scheduler import run_pipeline
-from app.config import POLL_INTERVAL_MINUTES
+from app.config import POLL_INTERVAL_MINUTES, DASHBOARD_USERNAME, DASHBOARD_PASSWORD, SESSION_SECRET
 
 POLL_INTERVAL_HOURS = round(POLL_INTERVAL_MINUTES / 60, 1)
 
@@ -23,6 +26,41 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
+
+_AUTH_ENABLED = bool(DASHBOARD_USERNAME and DASHBOARD_PASSWORD)
+_COOKIE_NAME = "lens_session"
+
+
+# ---------------------------------------------------------------------------
+# Cookie-based auth helpers (HMAC-SHA256, no external dependencies)
+# ---------------------------------------------------------------------------
+
+def _sign(value: str) -> str:
+    return _hmac.new(SESSION_SECRET.encode(), value.encode(), hashlib.sha256).hexdigest()
+
+
+def _make_session_cookie(username: str) -> str:
+    return f"{username}:{_sign(username)}"
+
+
+def _is_valid_cookie(cookie_value: str) -> bool:
+    if not cookie_value:
+        return False
+    parts = cookie_value.rsplit(":", 1)
+    if len(parts) != 2:
+        return False
+    username, sig = parts
+    return (
+        _hmac.compare_digest(sig, _sign(username))
+        and secrets.compare_digest(username, DASHBOARD_USERNAME)
+    )
+
+
+def is_authenticated(request: Request) -> bool:
+    """Return True if the request carries a valid session cookie (or auth is disabled)."""
+    if not _AUTH_ENABLED:
+        return True
+    return _is_valid_cookie(request.cookies.get(_COOKIE_NAME, ""))
 
 
 @asynccontextmanager
@@ -141,8 +179,54 @@ os.makedirs("templates", exist_ok=True)
 templates = Jinja2Templates(directory="templates")
 
 
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if is_authenticated(request):
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(request, "login.html", {"error": None})
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_submit(request: Request):
+    form = await request.form()
+    username = str(form.get("username", ""))
+    password = str(form.get("password", ""))
+
+    user_ok = secrets.compare_digest(username, DASHBOARD_USERNAME)
+    pass_ok = secrets.compare_digest(password, DASHBOARD_PASSWORD)
+
+    if user_ok and pass_ok:
+        response = RedirectResponse(url="/", status_code=302)
+        response.set_cookie(
+            _COOKIE_NAME,
+            _make_session_cookie(username),
+            httponly=True,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 7,  # 7 days
+        )
+        return response
+
+    return templates.TemplateResponse(
+        request, "login.html",
+        {"error": "Invalid username or password."},
+        status_code=200,
+    )
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie(_COOKIE_NAME)
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    # Return login page (200) when not authenticated — keeps the deployment
+    # startup probe happy (it hits GET / and needs a 200).
+    if not is_authenticated(request):
+        return templates.TemplateResponse(request, "login.html", {"error": None})
+
     from app.db import get_recent_articles, get_recent_videos
     articles = await get_recent_articles(limit=50)
     videos = await get_recent_videos(limit=20)
@@ -155,7 +239,9 @@ async def dashboard(request: Request):
 
 @app.post("/trigger")
 async def trigger_pipeline(request: Request):
-    """Manually trigger the pipeline."""
+    """Manually trigger the pipeline. Requires an active session."""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     import asyncio
     asyncio.create_task(run_pipeline())
     return {"message": "Pipeline triggered"}
@@ -163,6 +249,8 @@ async def trigger_pipeline(request: Request):
 
 @app.post("/submit-video", response_class=HTMLResponse)
 async def submit_video(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     """Handle video submission from dashboard form."""
     form_data = await request.form()
     url = form_data.get("url", "").strip()
