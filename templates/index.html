@@ -27,10 +27,16 @@
                     </h1>
                     <span class="text-xs font-semibold px-2 py-1 bg-gray-800 text-gray-400 rounded-full border border-gray-700">Automation Hub</span>
                 </div>
-                <button hx-post="/trigger" hx-swap="none" onclick="alert('Pipeline triggered! Refresh in a minute to see results.')"
-                    class="bg-accent hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-200">
-                    Run Pipeline Now
-                </button>
+                <div class="flex items-center gap-3">
+                    <button hx-post="/trigger" hx-swap="none" onclick="alert('Pipeline triggered! Refresh in a minute to see results.')"
+                        class="bg-accent hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-200">
+                        Run Pipeline Now
+                    </button>
+                    <a href="/logout"
+                        class="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-500 px-3 py-2 rounded-lg transition duration-200">
+                        Sign out
+                    </a>
+                </div>
             </div>
         </div>
     </nav>
