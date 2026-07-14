@@ -93,12 +93,6 @@ def _build_app_base_url() -> str:
 
 APP_BASE_URL = _build_app_base_url()
 
-# --- DASHBOARD AUTH ---
-# Set DASHBOARD_USERNAME and DASHBOARD_PASSWORD in Secrets to protect the dashboard.
-SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-insecure-secret-change-me")
-# If not set, the dashboard is accessible without authentication (dev mode).
-DASHBOARD_USERNAME = os.environ.get("DASHBOARD_USERNAME", "")
-DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 
 # --- YOUTUBE COOKIES ---
 # Paste the full Netscape-format cookies.txt content (exported from your browser
