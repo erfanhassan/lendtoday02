@@ -178,7 +178,8 @@ async def login_submit(request: Request):
             _COOKIE_NAME,
             _make_session_cookie(username),
             httponly=True,
-            samesite="lax",
+            samesite="none",
+            secure=True,
             max_age=60 * 60 * 24 * 7,  # 7 days
         )
         return response
