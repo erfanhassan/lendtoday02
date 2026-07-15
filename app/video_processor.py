@@ -108,7 +108,7 @@ def apply_video_template(video_path: str, template_path: str, title: str, credit
         if os.path.exists(template_path):
             template_clip = ImageClip(template_path).with_duration(video_clip.duration)
             if template_clip.size != (target_w, target_h):
-                template_clip = template_clip.resized(newsize=(target_w, target_h))
+                template_clip = template_clip.resized(new_size=(target_w, target_h))
             template_clip = template_clip.with_position("center")
             clips.append(template_clip)
         else:
