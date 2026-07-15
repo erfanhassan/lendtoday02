@@ -13,12 +13,26 @@ USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
 ]
 
+def _write_cookie_file(cookie_content: str, prefix: str) -> str:
+    """Write a Netscape cookie string to a temp file and return the path."""
+    tmp = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.txt', delete=False, prefix=prefix
+    )
+    content = cookie_content.strip()
+    if not content.startswith("# Netscape HTTP Cookie File"):
+        content = "# Netscape HTTP Cookie File\n" + content
+    tmp.write(content)
+    tmp.flush()
+    tmp.close()
+    return tmp.name
+
+
 def _get_ydl_opts(url: str, output_template: str) -> dict:
     """
     Build yt-dlp options tailored to the platform.
-    For YouTube, injects browser cookies when YOUTUBE_COOKIES is set.
+    Injects browser cookies for YouTube, Facebook, and Instagram when available.
     """
-    from app.config import YOUTUBE_COOKIES
+    from app.config import YOUTUBE_COOKIES, FACEBOOK_COOKIES, INSTAGRAM_COOKIES
 
     ua = random.choice(USER_AGENTS)
 
@@ -40,27 +54,40 @@ def _get_ydl_opts(url: str, output_template: str) -> dict:
 
     url_lower = url.lower()
     is_youtube = "youtube.com" in url_lower or "youtu.be" in url_lower
+    is_facebook = "facebook.com" in url_lower or "fb.watch" in url_lower
+    is_instagram = "instagram.com" in url_lower
 
     if is_youtube:
         if YOUTUBE_COOKIES:
-            # Write the Netscape cookie string to a temp file for yt-dlp
-            tmp = tempfile.NamedTemporaryFile(
-                mode='w', suffix='.txt', delete=False, prefix='yt_cookies_'
-            )
-            # Ensure the file starts with the Netscape header yt-dlp expects
-            content = YOUTUBE_COOKIES.strip()
-            if not content.startswith("# Netscape HTTP Cookie File"):
-                content = "# Netscape HTTP Cookie File\n" + content
-            tmp.write(content)
-            tmp.flush()
-            tmp.close()
-            base_opts['cookiefile'] = tmp.name
+            base_opts['cookiefile'] = _write_cookie_file(YOUTUBE_COOKIES, 'yt_cookies_')
             logger.info("YouTube download: using cookies from YOUTUBE_COOKIES secret.")
         else:
             logger.warning(
                 "YouTube download attempted without YOUTUBE_COOKIES secret. "
-                "Download will likely fail due to bot detection. "
+                "Download may fail due to bot detection. "
                 "Export cookies from a logged-in browser and add them as YOUTUBE_COOKIES secret."
+            )
+
+    elif is_facebook:
+        if FACEBOOK_COOKIES:
+            base_opts['cookiefile'] = _write_cookie_file(FACEBOOK_COOKIES, 'fb_cookies_')
+            logger.info("Facebook download: using cookies from FACEBOOK_COOKIES secret.")
+        else:
+            logger.warning(
+                "Facebook download attempted without FACEBOOK_COOKIES secret. "
+                "Facebook blocks unauthenticated server downloads. "
+                "Export cookies from a logged-in browser and add them as FACEBOOK_COOKIES secret."
+            )
+
+    elif is_instagram:
+        if INSTAGRAM_COOKIES:
+            base_opts['cookiefile'] = _write_cookie_file(INSTAGRAM_COOKIES, 'ig_cookies_')
+            logger.info("Instagram download: using cookies from INSTAGRAM_COOKIES secret.")
+        else:
+            logger.warning(
+                "Instagram download attempted without INSTAGRAM_COOKIES secret. "
+                "Instagram blocks unauthenticated server downloads. "
+                "Export cookies from a logged-in browser and add them as INSTAGRAM_COOKIES secret."
             )
 
     return base_opts

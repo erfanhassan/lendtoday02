@@ -100,8 +100,11 @@ SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-insecure-secret-change-me
 DASHBOARD_USERNAME = os.environ.get("DASHBOARD_USERNAME", "")
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 
-# --- YOUTUBE COOKIES ---
+# --- PLATFORM COOKIES ---
 # Paste the full Netscape-format cookies.txt content (exported from your browser
-# while logged in to YouTube) into this secret. Required to bypass YouTube's
-# bot-detection on server IPs.
+# while logged in to each platform) into the respective secret.
+# Required for Facebook and Instagram downloads (they block unauthenticated server IPs).
+# YouTube cookies also help bypass bot-detection on restricted videos.
 YOUTUBE_COOKIES = os.environ.get("YOUTUBE_COOKIES", "")
+FACEBOOK_COOKIES = os.environ.get("FACEBOOK_COOKIES", "")
+INSTAGRAM_COOKIES = os.environ.get("INSTAGRAM_COOKIES", "")
