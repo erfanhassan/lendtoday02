@@ -224,6 +224,22 @@ async def trigger_pipeline(request: Request):
     return {"message": "Pipeline triggered"}
 
 
+@app.post("/api/v1/test-simulation")
+async def test_simulation_endpoint(request: Request):
+    """Run the test simulation pipeline safely on Replit."""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    
+    from app.simulator import run_simulation
+    results = await run_simulation()
+    
+    # Check if there was any failure
+    if "failed_phase_error" in results:
+        return JSONResponse(status_code=500, content=results)
+        
+    return JSONResponse(status_code=200, content=results)
+
+
 @app.post("/submit-video", response_class=HTMLResponse)
 async def submit_video(request: Request):
     if not is_authenticated(request):
@@ -258,6 +274,12 @@ async def healthz():
     return {"status": "ok"}
 
 
+@app.get("/health")
+async def health():
+    """Unprotected health check required by Replit deployment."""
+    return {"status": "healthy"}
+
+
 @app.get("/next-run")
 async def next_run():
     """Return the UTC ISO timestamp of the next scheduled pipeline run."""
@@ -269,3 +291,9 @@ async def next_run():
     except Exception:
         pass
     return {"next_run": None}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=False, workers=1)

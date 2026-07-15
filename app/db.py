@@ -1,6 +1,7 @@
 import asyncpg
 import logging
-from app.config import DATABASE_URL
+import os
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,7 @@ async def init_db():
 
         logger.info("Database initialized successfully.")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise e
+        logger.warning(f"Failed to initialize database: {e} - Application will start but pipeline is disabled.")
 
 async def close_db():
     if pool:

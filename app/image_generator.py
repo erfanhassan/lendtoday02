@@ -28,6 +28,7 @@ FONT_PATHS = [
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
     "/System/Library/Fonts/HelveticaNeue.ttc",
     os.path.join(ASSETS_DIR, "Inter-Bold.ttf"),
+    os.path.join(ASSETS_DIR, "fonts", "Roboto-Bold.ttf"),
 ]
 
 

@@ -39,7 +39,7 @@ def extract_article_content(url: str) -> Optional[Dict[str, str]]:
     """
     try:
         config = newspaper.Config()
-        config.browser_user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        config.browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 
         article = newspaper.Article(url, config=config)
         article.download()
@@ -124,10 +124,10 @@ async def _scrape_feeds(feeds: Dict[str, str], core_needed: int, ent_needed: int
                             continue
                         published = pub_dt.strftime("%Y-%m-%d")
                     except Exception:
-                        published = datetime.now().strftime("%Y-%m-%d")
+                        published = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 else:
                     # No date in feed — include it but log a warning
-                    published = datetime.now().strftime("%Y-%m-%d")
+                    published = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                     logger.debug(f"No publish date for: {title[:60]} — including anyway")
 
                 if await is_url_processed(link):

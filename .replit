@@ -1,50 +1,5 @@
-modules = ["python-3.12", "web", "bash", "postgresql-16"]
-run = "uvicorn main:app --host 0.0.0.0 --port 5000"
-[agent]
-expertMode = true
-
-[nix]
-channel = "stable-25_05"
-packages = ["ffmpeg-full", "freetype", "imagemagickBig", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "postgresql", "tcl", "tk", "xcodebuild", "zlib"]
-
-[workflows]
-runButton = "Project"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Start application"
-
-[[workflows.workflow]]
-name = "Start application"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "uvicorn main:app --host 0.0.0.0 --port 5000"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[ports]]
-localPort = 5000
-externalPort = 80
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 60000
+modules = ["python-3.10"]
+run = "python main.py"
 
 [deployment]
-run = ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
-deploymentTarget = "vm"
-
-[[deployment.healthChecks]]
-path = "/healthz"
-initialDelaySeconds = 120
-periodSeconds = 15
-timeoutSeconds = 10
+run = "python main.py"
