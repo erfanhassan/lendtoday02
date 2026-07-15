@@ -2,7 +2,8 @@ modules = ["python-3.10", "postgresql-16"]
 run = "python main.py"
 
 [deployment]
-run = "python main.py"
+run = ["gunicorn", "--bind=0.0.0.0:5000", "--reuse-port", "--worker-class=uvicorn.workers.UvicornWorker", "--workers=1", "main:app"]
+deploymentTarget = "vm"
 
 [agent]
 expertMode = true
