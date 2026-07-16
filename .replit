@@ -38,3 +38,8 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.production]
+APP_BASE_URL = "https://lendtoday-02.replit.app"
