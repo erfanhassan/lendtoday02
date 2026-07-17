@@ -21,6 +21,7 @@ from app.ai import generate_video_text
 logger = logging.getLogger(__name__)
 
 _pipeline_lock = asyncio.Lock()
+_video_pipeline_lock = asyncio.Lock()
 
 
 def _build_image_url(article_id: int) -> str:
@@ -320,6 +321,15 @@ async def _run_pipeline_inner():
     logger.info("Pipeline execution completed.")
 
 async def run_video_pipeline():
+    if _video_pipeline_lock.locked():
+        logger.info("Video pipeline already running — skipping duplicate trigger.")
+        return
+
+    async with _video_pipeline_lock:
+        await _run_video_pipeline_inner()
+
+
+async def _run_video_pipeline_inner():
     while True:
         video_req = await get_pending_video()
         if not video_req:

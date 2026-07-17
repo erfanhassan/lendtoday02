@@ -13,14 +13,47 @@ USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
 ]
 
-def _write_cookie_file(cookie_content: str, prefix: str) -> str:
-    """Write a Netscape cookie string to a temp file and return the path."""
+def _browser_cookies_to_netscape(cookie_str: str, domain: str) -> str:
+    """
+    Convert a browser cookie header string (key=value; key=value; ...)
+    into Netscape cookie file format that yt-dlp can read.
+    """
+    import time
+    far_future = str(int(time.time()) + 60 * 60 * 24 * 365 * 2)  # 2 years
+    lines = ["# Netscape HTTP Cookie File"]
+    for pair in cookie_str.split(";"):
+        pair = pair.strip()
+        if "=" not in pair:
+            continue
+        name, _, value = pair.partition("=")
+        name = name.strip()
+        value = value.strip()
+        if not name:
+            continue
+        # domain  include_subdomains  path  secure  expiry  name  value
+        lines.append(f".{domain}\tTRUE\t/\tTRUE\t{far_future}\t{name}\t{value}")
+    return "\n".join(lines)
+
+
+def _write_cookie_file(cookie_content: str, prefix: str, domain: str = "") -> str:
+    """
+    Write cookies to a temp file for yt-dlp.
+    Auto-detects browser header format (key=val; key=val) and converts to
+    Netscape format. Proper Netscape files are written as-is.
+    """
     tmp = tempfile.NamedTemporaryFile(
         mode='w', suffix='.txt', delete=False, prefix=prefix
     )
     content = cookie_content.strip()
-    if not content.startswith("# Netscape HTTP Cookie File"):
+    if content.startswith("# Netscape HTTP Cookie File"):
+        # Already correct format
+        pass
+    elif "\t" in content:
+        # Looks like Netscape (tab-separated) but missing header
         content = "# Netscape HTTP Cookie File\n" + content
+    else:
+        # Browser cookie header string — convert it
+        content = _browser_cookies_to_netscape(content, domain or "example.com")
     tmp.write(content)
     tmp.flush()
     tmp.close()
@@ -59,7 +92,7 @@ def _get_ydl_opts(url: str, output_template: str) -> dict:
 
     if is_youtube:
         if YOUTUBE_COOKIES:
-            base_opts['cookiefile'] = _write_cookie_file(YOUTUBE_COOKIES, 'yt_cookies_')
+            base_opts['cookiefile'] = _write_cookie_file(YOUTUBE_COOKIES, 'yt_cookies_', 'youtube.com')
             logger.info("YouTube download: using cookies from YOUTUBE_COOKIES secret.")
         else:
             logger.warning(
@@ -70,7 +103,7 @@ def _get_ydl_opts(url: str, output_template: str) -> dict:
 
     elif is_facebook:
         if FACEBOOK_COOKIES:
-            base_opts['cookiefile'] = _write_cookie_file(FACEBOOK_COOKIES, 'fb_cookies_')
+            base_opts['cookiefile'] = _write_cookie_file(FACEBOOK_COOKIES, 'fb_cookies_', 'facebook.com')
             logger.info("Facebook download: using cookies from FACEBOOK_COOKIES secret.")
         else:
             logger.warning(
@@ -81,7 +114,7 @@ def _get_ydl_opts(url: str, output_template: str) -> dict:
 
     elif is_instagram:
         if INSTAGRAM_COOKIES:
-            base_opts['cookiefile'] = _write_cookie_file(INSTAGRAM_COOKIES, 'ig_cookies_')
+            base_opts['cookiefile'] = _write_cookie_file(INSTAGRAM_COOKIES, 'ig_cookies_', 'instagram.com')
             logger.info("Instagram download: using cookies from INSTAGRAM_COOKIES secret.")
         else:
             logger.warning(
