@@ -61,7 +61,7 @@ async def analyze_articles_batch(articles: List[Dict]) -> List[Dict]:
 
     try:
         response = await client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
@@ -124,7 +124,7 @@ async def generate_video_text(original_caption: str, context: str) -> dict | Non
 
     try:
         response = await client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             messages=[
                 {"role": "system", "content": VIDEO_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
