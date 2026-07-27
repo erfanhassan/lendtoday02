@@ -36,10 +36,43 @@ Each JSON object MUST contain:
 - 'engagement_question': A question to drive comments.
 - 'hashtags': 3 to 5 relevant hashtags."""
 
+def _build_article_prompt(articles: List[Dict]) -> str:
+    n = len(articles)
+    prompt = f"You have been given {n} article(s). Return a JSON array with exactly {n} object(s).\n\n"
+    for idx, article in enumerate(articles, start=1):
+        # Trim content to 800 chars so the full response fits within token budget
+        content = (article.get('content') or '')[:800]
+        prompt += f"Article {idx}:\n"
+        prompt += f"Title: {article.get('title')}\n"
+        prompt += f"Source: {article.get('source')}\n"
+        prompt += f"Category: {article.get('category')}\n"
+        prompt += f"Content:\n{content}\n\n"
+    return prompt
+
+
+def _parse_json_response(raw: str) -> list | None:
+    """Strip markdown fences and parse JSON. Returns list or None."""
+    raw = raw.strip()
+    if raw.startswith("```json"):
+        raw = raw[7:]
+    if raw.startswith("```"):
+        raw = raw[3:]
+    if raw.endswith("```"):
+        raw = raw[:-3]
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else None
+    except json.JSONDecodeError:
+        return None
+
+
 async def analyze_articles_batch(articles: List[Dict]) -> List[Dict]:
     """
     Sends articles to DeepSeek and requests a strict JSON array back.
-    Handles 1–5 articles gracefully.
+    Handles 1–5 articles gracefully. Retries up to 3 times on bad JSON.
     """
     client = _get_client()
     if not client:
@@ -50,57 +83,41 @@ async def analyze_articles_batch(articles: List[Dict]) -> List[Dict]:
         return []
 
     n = len(articles)
-    prompt = f"You have been given {n} article(s). Return a JSON array with exactly {n} object(s).\n\n"
-    for idx, article in enumerate(articles, start=1):
-        prompt += f"Article {idx}:\n"
-        prompt += f"Title: {article.get('title')}\n"
-        prompt += f"Source: {article.get('source')}\n"
-        prompt += f"Date: {article.get('date')}\n"
-        prompt += f"Category: {article.get('category')}\n"
-        prompt += f"Content:\n{article.get('content')}\n\n"
+    prompt = _build_article_prompt(articles)
 
-    try:
-        response = await client.chat.completions.create(
-            model="deepseek-v4-flash",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=1500
-        )
-
-        raw_output = response.choices[0].message.content.strip()
-
-        if raw_output.startswith("```json"):
-            raw_output = raw_output[7:]
-        if raw_output.startswith("```"):
-            raw_output = raw_output[3:]
-        if raw_output.endswith("```"):
-            raw_output = raw_output[:-3]
-
-        raw_output = raw_output.strip()
-
-        data = json.loads(raw_output)
-
-        if not isinstance(data, list):
-            logger.error("DeepSeek returned JSON but not an array.")
-            return []
-
-        if len(data) != n:
-            logger.warning(
-                f"DeepSeek returned {len(data)} decisions for {n} articles. "
-                f"Will match by index as fallback."
+    for attempt in range(1, 4):  # up to 3 attempts
+        try:
+            response = await client.chat.completions.create(
+                model="deepseek-v4-flash",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=4000,
             )
 
-        return data
+            raw_output = response.choices[0].message.content or ""
+            data = _parse_json_response(raw_output)
 
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON from DeepSeek: {e}. Raw Output: {raw_output}")
-        return []
-    except Exception as e:
-        logger.error(f"Error during DeepSeek API call: {e}")
-        return []
+            if data is not None:
+                if len(data) != n:
+                    logger.warning(
+                        f"DeepSeek returned {len(data)} decisions for {n} articles — "
+                        f"will match by index as fallback."
+                    )
+                return data
+
+            logger.warning(
+                f"Attempt {attempt}/3: DeepSeek returned invalid JSON. "
+                f"Raw (first 300 chars): {raw_output[:300]!r}"
+            )
+
+        except Exception as e:
+            logger.warning(f"Attempt {attempt}/3: DeepSeek API error: {e}")
+
+    logger.error("All 3 attempts failed — no AI decisions returned for this batch.")
+    return []
 
 VIDEO_SYSTEM_PROMPT = """You are a social media manager.
 You will be given the original caption of a viral video and optionally some context hints.
