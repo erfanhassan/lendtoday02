@@ -23,7 +23,7 @@ SYSTEM_PROMPT = """You are a Lead Editor. You will receive between 1 and 5 news 
 Each JSON object MUST contain:
 - 'slot': The article's position number as given in the input (1, 2, 3, etc.).
 - 'category': 'Core' or 'Entertainment'.
-- 'headline': A punchy 5-8 word headline.
+- 'headline': A SUPER SHORT, CATCHY image headline — maximum 6 words, plain everyday English that even a child can understand. Rules: NO acronyms (no BSEC, DSE, EC, CEC, PM, MP, etc.), NO government body names, NO formal titles, NO jargon. Write like a shocking WhatsApp message to a friend, not like a newspaper. Start with an emotional hook or action word. GOOD examples: "Big trouble for Shakib's company!", "Election date coming soon!", "UK man jailed for big lie", "Two students arrested after violence", "Bangladesh scores huge win!", "Police find 4 guns at border". BAD examples: "BSEC Asks DSE to Explain Licence Renewal", "CEC Says Voter List Ready for Presidential Polls", "PM Prioritises Healthcare Innovation Backs Medical Devices".
 - 'source_text': Formatted exactly as 'Via [Source Name]'. Do NOT include a date or day.
 - 'search_query': Act as an Art Director. ALWAYS start with the specific person's full name, team name, place name, or organisation name that is the main subject of the story — never omit it. Then add 2-3 highly visual, physical descriptive words. The query MUST be anchored to the exact real subject so image search returns a photo of the correct person or place.
 - Example for Messi story: 'Lionel Messi World Cup goal celebration Argentina'.

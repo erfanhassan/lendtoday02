@@ -478,7 +478,7 @@ def generate_graphic(article_id: int, decision: dict) -> str:
     # ── Headline text — centred in bottom panel ───────────────────────────────
     max_text_width = 960
     lines, headline_font = _wrap_text_with_font_scaling(
-        headline, draw, max_text_width, max_lines=3, start_size=82
+        headline, draw, max_text_width, max_lines=2, start_size=88
     )
 
     font_size_approx = headline_font.size if hasattr(headline_font, 'size') else 82
