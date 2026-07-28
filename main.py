@@ -17,10 +17,8 @@ from app.db import (
     confirm_publishing_article_published,
     reset_publishing_article_to_publish,
 )
-from app.scheduler import run_pipeline
-from app.config import POLL_INTERVAL_MINUTES, DASHBOARD_USERNAME, DASHBOARD_PASSWORD, SESSION_SECRET
-
-POLL_INTERVAL_HOURS = round(POLL_INTERVAL_MINUTES / 60, 1)
+from app.scheduler import run_pipeline, set_scheduler
+from app.config import DASHBOARD_USERNAME, DASHBOARD_PASSWORD, SESSION_SECRET
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -131,8 +129,8 @@ async def lifespan(app: FastAPI):
 
             await run_pipeline()
 
-        scheduler.add_job(run_pipeline, 'interval', minutes=POLL_INTERVAL_MINUTES)
         scheduler.start()
+        set_scheduler(scheduler)   # give scheduler.py a reference so run_pipeline can self-reschedule
 
         asyncio.create_task(_startup_recovery_and_pipeline())
     else:
@@ -211,7 +209,6 @@ async def dashboard(request: Request):
     return templates.TemplateResponse(request, "index.html", {
         "articles": articles,
         "videos": videos,
-        "poll_interval_hours": POLL_INTERVAL_HOURS,
     })
 
 

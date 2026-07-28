@@ -71,9 +71,6 @@ META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "")
 META_PAGE_ID = os.environ.get("META_PAGE_ID", "")
 META_IG_ACCOUNT_ID = os.environ.get("META_IG_ACCOUNT_ID", "")
 
-# Posting schedule: every 8 hours, 5 posts per session.
-POLL_INTERVAL_MINUTES = int(os.environ.get("POLL_INTERVAL_MINUTES", "480"))
-
 # Public base URL (used to serve images/videos to Instagram)
 def _build_app_base_url() -> str:
     """Resolve the public base URL, supporting both Replit dev and production."""

@@ -1,6 +1,8 @@
 import logging
 import asyncio
 import os
+import random
+from datetime import datetime, timezone, timedelta
 from app.scraper import fetch_5_articles, extract_article_content
 from app.ai import analyze_articles_batch
 from app.image_generator import generate_graphic
@@ -22,6 +24,69 @@ logger = logging.getLogger(__name__)
 
 _pipeline_lock = asyncio.Lock()
 _video_pipeline_lock = asyncio.Lock()
+
+# ── Random self-rescheduling scheduler ────────────────────────────────────────
+_app_scheduler = None       # set by main.py via set_scheduler()
+_daily_post_count = 0       # how many pipeline runs completed today (UTC date)
+_daily_post_date  = None    # the UTC date the counter belongs to (datetime.date)
+
+DAILY_POST_CAP = 4          # never post more than this many times in one UTC day
+_PIPELINE_JOB_ID = "run_pipeline_dynamic"
+
+
+def set_scheduler(scheduler) -> None:
+    """Store a reference to the APScheduler instance so run_pipeline can reschedule itself."""
+    global _app_scheduler
+    _app_scheduler = scheduler
+
+
+def _next_run_delay_minutes() -> int:
+    """Return a random delay (minutes) weighted by Bangladesh peak hours.
+
+    Bangladesh Standard Time = UTC+6.
+    Peak (6–11 PM BST = 12–17 UTC):   60–150 min  — post more often
+    Eve wind-down (11 PM–2 AM BST = 17–20 UTC): 120–240 min
+    Morning/Afternoon (7 AM–6 PM BST = 01–12 UTC): 150–300 min
+    Overnight (2–7 AM BST = 20–01 UTC): 300–420 min  — post rarely
+    """
+    hour = datetime.now(timezone.utc).hour  # 0–23 UTC
+    if 12 <= hour < 17:
+        return random.randint(60, 150)
+    elif 17 <= hour < 20:
+        return random.randint(120, 240)
+    elif 1 <= hour < 12:
+        return random.randint(150, 300)
+    else:
+        # 20–23 and 0 (overnight in Bangladesh)
+        return random.randint(240, 360)
+
+
+def schedule_next_pipeline_run(scheduler=None) -> None:
+    """Add a one-shot date-trigger job for the next pipeline run.
+
+    Removes any previously scheduled job with the same ID first so there is
+    never more than one pending pipeline trigger at a time.
+    """
+    sch = scheduler or _app_scheduler
+    if sch is None or not sch.running:
+        logger.warning("schedule_next_pipeline_run: scheduler not available, cannot reschedule.")
+        return
+
+    delay = _next_run_delay_minutes()
+    next_run = datetime.now(timezone.utc) + timedelta(minutes=delay)
+
+    # Replace any existing dynamic job (idempotent)
+    sch.add_job(
+        run_pipeline,
+        "date",
+        run_date=next_run,
+        id=_PIPELINE_JOB_ID,
+        replace_existing=True,
+    )
+    logger.info(
+        f"Next pipeline run in {delay} min "
+        f"(at {next_run.strftime('%Y-%m-%d %H:%M UTC')})"
+    )
 
 
 def _build_image_url(article_id: int) -> str:
@@ -147,12 +212,44 @@ async def _run_qa_and_publish(article_id: int, image_path: str, caption: str,
 
 
 async def run_pipeline():
+    global _daily_post_count, _daily_post_date
+
     if _pipeline_lock.locked():
         logger.warning("Pipeline already running — skipping this trigger to prevent duplicate posts.")
         return
 
     async with _pipeline_lock:
-        await _run_pipeline_inner()
+        # ── Daily cap check ──────────────────────────────────────────────────
+        today = datetime.now(timezone.utc).date()
+        if _daily_post_date != today:
+            _daily_post_count = 0
+            _daily_post_date = today
+
+        if _daily_post_count >= DAILY_POST_CAP:
+            # Cap reached — skip today, schedule first run of tomorrow's peak window
+            # (6 PM BST = 12:00 UTC)
+            tomorrow = today + timedelta(days=1)
+            next_run = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 12, 0,
+                                tzinfo=timezone.utc)
+            if _app_scheduler and _app_scheduler.running:
+                _app_scheduler.add_job(
+                    run_pipeline, "date", run_date=next_run,
+                    id=_PIPELINE_JOB_ID, replace_existing=True,
+                )
+            logger.info(
+                f"Daily post cap reached ({_daily_post_count}/{DAILY_POST_CAP}). "
+                f"Next run tomorrow at {next_run.strftime('%Y-%m-%d %H:%M UTC')}."
+            )
+            return
+
+        _daily_post_count += 1
+        logger.info(f"Pipeline run {_daily_post_count}/{DAILY_POST_CAP} today.")
+
+        try:
+            await _run_pipeline_inner()
+        finally:
+            # Always reschedule — even if the inner pipeline raised an exception
+            schedule_next_pipeline_run()
 
 
 async def _run_pipeline_inner():
