@@ -52,21 +52,37 @@ def _build_article_prompt(articles: List[Dict]) -> str:
 
 
 def _parse_json_response(raw: str) -> list | None:
-    """Strip markdown fences and parse JSON. Returns list or None."""
+    """Extract JSON array using regex and parse it. Returns list or None."""
+    import re
     raw = raw.strip()
+    
+    # Try to find the outermost JSON array
+    match = re.search(r'\[\s*\{.*\}\s*\]', raw, re.DOTALL)
+    if match:
+        json_str = match.group(0)
+        try:
+            data = json.loads(json_str)
+            return data if isinstance(data, list) else None
+        except json.JSONDecodeError:
+            pass
+            
+    # Fallback to simple cleaning if regex fails or is malformed
     if raw.startswith("```json"):
         raw = raw[7:]
-    if raw.startswith("```"):
+    elif raw.startswith("```"):
         raw = raw[3:]
     if raw.endswith("```"):
         raw = raw[:-3]
     raw = raw.strip()
+    
     if not raw:
         return None
+        
     try:
         data = json.loads(raw)
         return data if isinstance(data, list) else None
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON Parsing Error: {e}. Raw content: {raw}")
         return None
 
 
