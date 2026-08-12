@@ -225,6 +225,17 @@ async def trigger_pipeline(request: Request):
     return {"message": "Pipeline triggered"}
 
 
+@app.post("/trigger-instant")
+async def trigger_instant_pipeline(request: Request):
+    """Manually trigger the instant pipeline to process exactly one item."""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    import asyncio
+    from app.scheduler import run_instant_pipeline
+    asyncio.create_task(run_instant_pipeline())
+    return {"message": "Instant Pipeline triggered"}
+
+
 @app.post("/api/v1/test-simulation")
 async def test_simulation_endpoint(request: Request):
     """Run the test simulation pipeline safely on Replit."""

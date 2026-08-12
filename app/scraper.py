@@ -213,3 +213,19 @@ async def fetch_5_articles() -> List[Dict]:
         articles.extend(t2_articles)
 
     return articles
+
+async def fetch_1_article() -> List[Dict]:
+    """
+    Fetch exactly 1 article for the instant pipeline.
+    """
+    articles = []
+    # Try Tier 1 first
+    t1_articles = await _scrape_feeds(TIER_1_FEEDS, 1, 0)
+    articles.extend(t1_articles)
+    
+    # Try Tier 2 if Tier 1 failed
+    if not articles:
+        t2_articles = await _scrape_feeds(TIER_2_FEEDS, 1, 0)
+        articles.extend(t2_articles)
+        
+    return articles

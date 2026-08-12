@@ -70,7 +70,7 @@ def _get_ydl_opts(url: str, output_template: str) -> dict:
     ua = random.choice(USER_AGENTS)
 
     base_opts = {
-        'format': 'best[ext=mp4]/best',
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,

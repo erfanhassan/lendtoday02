@@ -3,7 +3,7 @@ import asyncio
 import os
 import random
 from datetime import datetime, timezone, timedelta
-from app.scraper import fetch_5_articles, extract_article_content
+from app.scraper import fetch_5_articles, extract_article_content, fetch_1_article
 from app.ai import analyze_articles_batch
 from app.image_generator import generate_graphic
 from app.publisher import upload_image_to_facebook, publish_to_instagram
@@ -446,6 +446,105 @@ async def _run_pipeline_inner():
             await asyncio.sleep(5)
 
     logger.info("Pipeline execution completed.")
+
+async def run_instant_pipeline():
+    """
+    Scrapes exactly 1 article, processes it via DeepSeek, generates an image, 
+    and publishes it immediately. Used for the Instant Post button.
+    """
+    logger.info("Starting INSTANT Pipeline execution...")
+    try:
+        articles_meta = await fetch_1_article()
+        if not articles_meta:
+            logger.info("No fresh articles found for Instant Post.")
+            return
+
+        meta = articles_meta[0]
+        url = meta['url']
+        title = meta['title']
+        source = meta['source']
+
+        if await is_url_processed(url):
+            logger.info(f"Instant Post skipped: Article already processed: {title}")
+            return
+
+        logger.info(f"Instant Post processing new article: {title}")
+        article_id = await insert_article(source, url, title)
+
+        result = await asyncio.to_thread(extract_article_content, url)
+        if not result or not result.get("content"):
+            rss_summary = meta.get("rss_summary", "")
+            if rss_summary:
+                logger.info(f"Full article blocked for {url} — using RSS summary as fallback.")
+                result = {"content": rss_summary}
+            else:
+                logger.warning(f"Could not extract content for {url}. Dropping.")
+                await update_article_ai_decision(
+                    article_id, "DROP", "none", 0, "", "", "", "", "", "", None
+                )
+                return
+
+        meta['content'] = result['content']
+        if 'article_image_url' in result:
+            meta['article_image_url'] = result['article_image_url']
+        if 'article_images' in result:
+            meta['article_images'] = result['article_images']
+        meta['article_id'] = article_id
+
+        # Phase 2: Run AI decision
+        from app.ai import evaluate_article
+        logger.info(f"Instant Post AI Evaluation for: {title}")
+        decision = await asyncio.to_thread(evaluate_article, meta)
+        
+        status_action = decision.get("action", "DROP")
+        topic = decision.get("topic", "none")
+        score = decision.get("score", 0)
+        reasoning = decision.get("reasoning", "")
+        summary = decision.get("summary", "")
+        caption = decision.get("caption", "")
+        image_prompt = decision.get("image_prompt", "")
+        search_query = decision.get("search_query", "")
+        ai_model_used = decision.get("model_used", "")
+
+        await update_article_ai_decision(
+            article_id,
+            status_action,
+            topic,
+            score,
+            reasoning,
+            summary,
+            caption,
+            image_prompt,
+            search_query,
+            ai_model_used,
+            None
+        )
+
+        if status_action == "PUBLISH":
+            logger.info(f"Instant Post Image Generation for: {title}")
+            from app.image_generator import generate_graphic
+            decision["article_image_url"] = meta.get("article_image_url")
+            decision["article_images"] = meta.get("article_images")
+            decision["rss_image"] = meta.get("rss_image")
+
+            img_path = await asyncio.to_thread(generate_graphic, article_id, decision)
+            if img_path:
+                logger.info(f"Instant Post publishing to Facebook and Instagram for: {title}")
+                await mark_article_publishing(article_id)
+                success = await _publish_to_all(article_id, img_path, caption)
+                if success:
+                    logger.info("Instant Post complete!")
+                else:
+                    logger.error("Instant Post failed to publish.")
+            else:
+                logger.error("Instant Post image generation failed.")
+                await mark_article_qa_failed(article_id, "Image generation failed.")
+        else:
+            logger.info(f"Instant Post AI decided to DROP article: {title}")
+
+    except Exception as e:
+        logger.error(f"Error during Instant Pipeline execution: {e}", exc_info=True)
+
 
 async def run_video_pipeline():
     if _video_pipeline_lock.locked():
