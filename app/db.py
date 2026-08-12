@@ -20,12 +20,18 @@ async def init_db():
     except Exception:
         logger.info("Initializing database connection pool...")
     try:
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
         pool = await asyncpg.create_pool(
             DATABASE_URL,
             min_size=1,
             max_size=10,
             timeout=10,          # seconds to wait for a connection from the pool
             command_timeout=15,  # seconds before a query times out
+            ssl=ctx
         )
         async with pool.acquire() as conn:
             await conn.execute('''
