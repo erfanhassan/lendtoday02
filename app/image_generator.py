@@ -121,43 +121,70 @@ def _download_and_validate(url: str, headers: dict, timeout: int = 10) -> Image.
         logger.warning(f"Failed to download/validate image from {url}: {e}")
         return None
 
-def _stage0_imagen(image_prompt: str) -> Image.Image | None:
+def _stage0_imagen(image_prompt: str, reference_image: Image.Image | None = None) -> Image.Image | None:
     if not image_prompt:
         return None
-        
+
     try:
         import vertexai
         vertexai.init()
         from vertexai.preview.vision_models import ImageGenerationModel
-        
-        model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
-        logger.info(f"Stage 0: Generating image via Imagen with prompt: '{image_prompt[:100]}...'")
-        
-        images = model.generate_images(
-            prompt=image_prompt,
-            number_of_images=1,
-            aspect_ratio="3:4",
-        )
-        
+
+        if reference_image:
+            # ── Image-to-Image (Background Replacement) ──
+            model = ImageGenerationModel.from_pretrained("imagen-3.0-capability-001")
+            logger.info(f"Stage 0: Generating image via Imagen 3 (Image-to-Image) with prompt: '{image_prompt[:100]}...'")
+
+            # product-image mode keeps the subject and replaces the background using the prompt
+            response = model.edit_image(
+                base_image=reference_image,
+                prompt=image_prompt,
+                edit_mode="product-image",
+            )
+            images = response.images if hasattr(response, 'images') else getattr(response, 'generated_images', response)
+        else:
+            # ── Text-to-Image ──
+            model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
+            logger.info(f"Stage 0: Generating image via Imagen 3 (Text-to-Image) with prompt: '{image_prompt[:100]}...'")
+
+            images = model.generate_images(
+                prompt=image_prompt,
+                number_of_images=1,
+                aspect_ratio="3:4",
+            )
+
         if images:
             from io import BytesIO
-            img_byte_arr = images[0]._image_bytes
+            # Handle different SDK versions returning images differently
+            if hasattr(images[0], '_image_bytes'):
+                img_byte_arr = images[0]._image_bytes
+            elif hasattr(images[0], 'image_bytes'):
+                img_byte_arr = images[0].image_bytes
+            elif hasattr(images[0], 'image'):
+                import base64
+                if hasattr(images[0].image, 'image_bytes'):
+                     img_byte_arr = images[0].image.image_bytes
+                else:
+                    return None
+            else:
+                return None
+
             img = Image.open(BytesIO(img_byte_arr))
             img.load()
-            
+
             w, h = img.size
             if w < MIN_IMAGE_WIDTH or h < MIN_IMAGE_HEIGHT:
                 logger.warning(f"Stage 0: Generated image too small ({w}x{h})")
                 return None
-                
+
             logger.info(f"Stage 0: Success — Image generated via Imagen 3 ({w}x{h})")
             return img
-            
+
     except ImportError:
         logger.warning("Stage 0: google-cloud-aiplatform not installed. Skipping Imagen.")
     except Exception as e:
         logger.warning(f"Stage 0: Imagen generation failed: {e}")
-        
+
     return None
 
 
@@ -453,37 +480,55 @@ def generate_graphic(article_id: int, decision: dict) -> str:
     if source_text:
         source_text = source_text.replace(" | None", "").replace(" | null", "").strip()
 
-    # ── 4-Stage Image Waterfall ──────────────────────────────────────────────
-    # _qa_override_bg is injected by the QA agent when it finds a replacement
-    # background during a fallback-image retry, avoiding a redundant re-search.
+    # ── 4-Stage Image Waterfall (Updated for Reference Images) ──
     _override = decision.get("_qa_override_bg")
     article_images = decision.get("article_images")  # full candidate list from scraper
+    rss_image = decision.get("rss_image", "")
 
     image_source_label = "unknown"
     bg_img: Image.Image | None = None
-
-    rss_image = decision.get("rss_image", "")
+    reference_img: Image.Image | None = None
 
     if _override:
         bg_img = _override
         image_source_label = decision.get("_qa_override_source", "qa_retry")
-    elif (s0 := _stage0_imagen(image_prompt)):
-        bg_img = s0
-        image_source_label = "gemini_imagen"
-    elif (s1 := _stage1_publisher(article_image_url, article_images, rss_image)):
-        bg_img = s1
-        image_source_label = "article"
-    elif (s2 := _stage2_google(search_query)):
-        bg_img = s2
-        image_source_label = "google"
     else:
-        wiki_img, wiki_title = _stage3_wikipedia(search_query)
-        if wiki_img:
-            bg_img = wiki_img
-            image_source_label = f"wikipedia:{wiki_title}"
+        # First, try to find a real reference image (Stage 1, 2, or 3)
+        if (s1 := _stage1_publisher(article_image_url, article_images, rss_image)):
+            reference_img = s1
+            image_source_label = "article"
+        elif (s2 := _stage2_google(search_query)):
+            reference_img = s2
+            image_source_label = "google"
         else:
-            bg_img = _stage4_fallback()
-            image_source_label = "fallback"
+            wiki_img, wiki_title = _stage3_wikipedia(search_query)
+            if wiki_img:
+                reference_img = wiki_img
+                image_source_label = f"wikipedia:{wiki_title}"
+
+        # Now pass the reference image to Gemini (Stage 0)
+        # If Gemini fails, we will fall back to using the reference image directly
+        if image_prompt:
+            gemini_img = _stage0_imagen(image_prompt, reference_image=reference_img)
+            if gemini_img:
+                bg_img = gemini_img
+                # Keep the source label of the reference so we know where it originated,
+                # but denote it was processed by Gemini
+                if reference_img:
+                    image_source_label = f"gemini_edited_from_{image_source_label}"
+                else:
+                    image_source_label = "gemini_imagen"
+            else:
+                logger.warning("Gemini image generation failed. Falling back to reference image.")
+
+        # If Gemini failed and we have a reference, use it directly.
+        # Otherwise use fallback.
+        if not bg_img:
+            if reference_img:
+                bg_img = reference_img
+            else:
+                bg_img = _stage4_fallback()
+                image_source_label = "fallback"
 
     # Record the image source in the decision dict so the QA agent can check relevance.
     decision["_image_source_label"] = image_source_label

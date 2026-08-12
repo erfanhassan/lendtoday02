@@ -268,6 +268,19 @@ async def get_recent_articles(limit: int = 50):
         ''', limit)
         return [dict(r) for r in records]
 
+async def get_pending_articles(limit: int = 5) -> list[dict]:
+    """Fetch un-processed articles that are currently in PENDING status."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        records = await conn.fetch('''
+            SELECT id as article_id, source, url, title, category, status, created_at
+            FROM articles
+            WHERE status = 'PENDING'
+            ORDER BY created_at ASC
+            LIMIT $1
+        ''', limit)
+        return [dict(r) for r in records]
+
 async def insert_video_request(url: str, context: str, video_index: int = 1) -> int:
     p = await get_pool()
     async with p.acquire() as conn:

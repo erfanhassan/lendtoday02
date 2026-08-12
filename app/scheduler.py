@@ -14,6 +14,7 @@ from app.db import (
     mark_article_published, mark_article_publishing, reset_publishing_to_publish,
     get_unpublished_articles, update_article_qa_status, mark_article_qa_failed,
     get_pending_video, update_video_status, store_publishing_post_ids,
+    get_pending_articles,
 )
 from app.video_scraper import download_video_and_metadata
 from app.video_processor import apply_video_template
@@ -256,18 +257,45 @@ async def _run_pipeline_inner():
     logger.info("Starting Lens Today Pipeline execution...")
 
     articles_meta = await fetch_5_articles()
+    pending_articles_db = await get_pending_articles(limit=5)
 
     # ── Phase 1: Process any new articles from feeds ──────────────────────────
     # We always fall through to Phase 2 (retry loop) regardless of whether
     # new articles were found, so stuck PUBLISH articles are never abandoned.
     articles_with_content = []
+
+    # First, try to process articles that are stuck in PENDING status in the DB
+    for meta in pending_articles_db:
+        url = meta['url']
+        title = meta['title']
+        article_id = meta['article_id']
+        logger.info(f"Resuming pending article from DB: {title}")
+
+        result = await asyncio.to_thread(extract_article_content, url)
+        if not result or not result.get("content"):
+            logger.warning(f"Could not extract content for {url}. Dropping pending article.")
+            await update_article_ai_decision(
+                article_id, "DROP", "none", 0, "", "", "", "", "", "", None
+            )
+            continue
+
+        meta['content'] = result['content']
+        if 'article_image_url' in result:
+            meta['article_image_url'] = result['article_image_url']
+        if 'article_images' in result:
+            meta['article_images'] = result['article_images']
+        articles_with_content.append(meta)
+
+    # Then process newly scraped articles up to a total of 5
     for meta in articles_meta:
+        if len(articles_with_content) >= 5:
+            break
+
         url = meta['url']
         title = meta['title']
         source = meta['source']
 
         if await is_url_processed(url):
-            logger.info(f"Article already processed: {title}")
             continue
 
         logger.info(f"Processing new article: {title}")
