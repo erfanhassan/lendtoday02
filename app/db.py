@@ -1,6 +1,9 @@
 import asyncpg
 import logging
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 logger = logging.getLogger(__name__)
