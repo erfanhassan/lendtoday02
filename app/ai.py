@@ -32,6 +32,7 @@ Each JSON object MUST contain:
 - Example for Kenya Health Minister: 'Kenya Health Minister Susan Nakhumicha court'.
 - Example for economy: 'stock market digital chart red' or 'frustrated shopper empty wallet'.
 - Example for Politics: '[Politician Full Name] press conference portrait'.
+- 'image_prompt': An incredibly descriptive, highly visual prompt for an AI image generator (like Midjourney or Imagen) to create a photorealistic background image for this news. Must not contain text. Must describe lighting, mood, and subjects clearly. e.g. "Photorealistic wide shot of a crowded stock exchange floor during a crash, frantic traders, red screens glowing, cinematic lighting."
 - 'social_media_caption': A rephrased summary for social media. Do NOT include any date or day in the caption.
 - 'engagement_question': A question to drive comments.
 - 'hashtags': 3 to 5 relevant hashtags."""

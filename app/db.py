@@ -59,6 +59,7 @@ async def init_db():
                 'ALTER TABLE articles ADD COLUMN headline TEXT;',
                 'ALTER TABLE articles ADD COLUMN source_text TEXT;',
                 'ALTER TABLE articles ADD COLUMN search_query TEXT;',
+                'ALTER TABLE articles ADD COLUMN image_prompt TEXT;',
                 'ALTER TABLE articles ADD COLUMN social_media_caption TEXT;',
                 'ALTER TABLE articles ADD COLUMN engagement_question TEXT;',
                 'ALTER TABLE articles ADD COLUMN hashtags TEXT;',
@@ -121,7 +122,8 @@ async def update_article_ai_decision(
     social_media_caption: str,
     engagement_question: str,
     hashtags: str,
-    article_image_url: str = None
+    article_image_url: str = None,
+    image_prompt: str = None
 ):
     p = await get_pool()
     async with p.acquire() as conn:
@@ -129,10 +131,10 @@ async def update_article_ai_decision(
             UPDATE articles
             SET status = $1, category = $2, slot = $3, headline = $4, source_text = $5,
                 search_query = $6, social_media_caption = $7, engagement_question = $8,
-                hashtags = $9, article_image_url = $10
-            WHERE id = $11
+                hashtags = $9, article_image_url = $10, image_prompt = $11
+            WHERE id = $12
         ''', status, category, slot, headline, source_text, search_query,
-            social_media_caption, engagement_question, hashtags, article_image_url, article_id)
+            social_media_caption, engagement_question, hashtags, article_image_url, image_prompt, article_id)
 
 async def mark_article_publishing(article_id: int) -> bool:
     """

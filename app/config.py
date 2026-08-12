@@ -90,6 +90,9 @@ def _build_app_base_url() -> str:
 
 APP_BASE_URL = _build_app_base_url()
 
+# --- PIPELINE SETTINGS ---
+AUTO_START_PIPELINE = os.environ.get("AUTO_START_PIPELINE", "true").lower() == "true"
+
 # --- DASHBOARD AUTH ---
 # Set DASHBOARD_USERNAME and DASHBOARD_PASSWORD in Secrets to protect the dashboard.
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-insecure-secret-change-me")

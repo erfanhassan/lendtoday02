@@ -18,7 +18,7 @@ from app.db import (
     reset_publishing_article_to_publish,
 )
 from app.scheduler import run_pipeline, set_scheduler
-from app.config import DASHBOARD_USERNAME, DASHBOARD_PASSWORD, SESSION_SECRET
+from app.config import DASHBOARD_USERNAME, DASHBOARD_PASSWORD, SESSION_SECRET, AUTO_START_PIPELINE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -127,7 +127,10 @@ async def lifespan(app: FastAPI):
                 if summary_parts:
                     logger.info(f"Startup recovery: {', '.join(summary_parts)}.")
 
-            await run_pipeline()
+            if AUTO_START_PIPELINE:
+                await run_pipeline()
+            else:
+                logger.info("AUTO_START_PIPELINE is false — skipping immediate pipeline run on startup.")
 
         scheduler.start()
         set_scheduler(scheduler)   # give scheduler.py a reference so run_pipeline can self-reschedule
@@ -176,8 +179,8 @@ async def login_submit(request: Request):
             _COOKIE_NAME,
             _make_session_cookie(username),
             httponly=True,
-            samesite="none",
-            secure=True,
+            samesite="lax",
+            secure=False,
             max_age=60 * 60 * 24 * 7,  # 7 days
         )
         return response

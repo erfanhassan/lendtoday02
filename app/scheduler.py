@@ -322,6 +322,7 @@ async def _run_pipeline_inner():
                     headline = decision.get("headline", "")
                     source_text = decision.get("source_text", "")
                     search_query = decision.get("search_query", "")
+                    image_prompt = decision.get("image_prompt", "")
                     social_caption = decision.get("social_media_caption", "")
                     engagement_question = decision.get("engagement_question", "")
 
@@ -342,7 +343,8 @@ async def _run_pipeline_inner():
                         social_media_caption=social_caption,
                         engagement_question=engagement_question,
                         hashtags=hashtags,
-                        article_image_url=article.get('article_image_url')
+                        article_image_url=article.get('article_image_url'),
+                        image_prompt=image_prompt
                     )
 
                     logger.info(f"AI Decision: PUBLISH. Category: {category}, Slot: {slot}")

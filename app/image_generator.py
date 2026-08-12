@@ -121,6 +121,45 @@ def _download_and_validate(url: str, headers: dict, timeout: int = 10) -> Image.
         logger.warning(f"Failed to download/validate image from {url}: {e}")
         return None
 
+def _stage0_imagen(image_prompt: str) -> Image.Image | None:
+    if not image_prompt:
+        return None
+        
+    try:
+        import vertexai
+        vertexai.init()
+        from vertexai.preview.vision_models import ImageGenerationModel
+        
+        model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
+        logger.info(f"Stage 0: Generating image via Imagen with prompt: '{image_prompt[:100]}...'")
+        
+        images = model.generate_images(
+            prompt=image_prompt,
+            number_of_images=1,
+            aspect_ratio="3:4",
+        )
+        
+        if images:
+            from io import BytesIO
+            img_byte_arr = images[0]._image_bytes
+            img = Image.open(BytesIO(img_byte_arr))
+            img.load()
+            
+            w, h = img.size
+            if w < MIN_IMAGE_WIDTH or h < MIN_IMAGE_HEIGHT:
+                logger.warning(f"Stage 0: Generated image too small ({w}x{h})")
+                return None
+                
+            logger.info(f"Stage 0: Success — Image generated via Imagen 3 ({w}x{h})")
+            return img
+            
+    except ImportError:
+        logger.warning("Stage 0: google-cloud-aiplatform not installed. Skipping Imagen.")
+    except Exception as e:
+        logger.warning(f"Stage 0: Imagen generation failed: {e}")
+        
+    return None
+
 
 def _stage1_publisher(article_image_url: str,
                        article_images: list | None = None,
@@ -407,6 +446,7 @@ def _wrap_text_with_font_scaling(text: str, draw: ImageDraw.ImageDraw,
 def generate_graphic(article_id: int, decision: dict) -> str:
     headline = decision.get("headline", "Breaking News")
     search_query = decision.get("search_query", "")
+    image_prompt = decision.get("image_prompt", "")
     source_text = decision.get("source_text", "")
     article_image_url = decision.get("article_image_url", "")
 
@@ -427,6 +467,9 @@ def generate_graphic(article_id: int, decision: dict) -> str:
     if _override:
         bg_img = _override
         image_source_label = decision.get("_qa_override_source", "qa_retry")
+    elif (s0 := _stage0_imagen(image_prompt)):
+        bg_img = s0
+        image_source_label = "gemini_imagen"
     elif (s1 := _stage1_publisher(article_image_url, article_images, rss_image)):
         bg_img = s1
         image_source_label = "article"

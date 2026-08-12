@@ -3,6 +3,7 @@ asyncpg
 duckduckgo-search
 fastapi
 feedparser
+google-cloud-aiplatform
 gunicorn
 httpx
 jinja2
