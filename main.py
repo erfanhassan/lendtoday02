@@ -156,6 +156,18 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 os.makedirs("templates", exist_ok=True)
 templates = Jinja2Templates(directory="templates")
 
+from datetime import datetime, timedelta
+
+def format_bst(dt):
+    if not dt:
+        return "-"
+    # Convert UTC to BST (UTC+6)
+    bst_time = dt + timedelta(hours=6)
+    # Format: 12 Aug 2026, 08:12 PM (12-hour format)
+    return bst_time.strftime("%d %b %Y, %I:%M %p")
+
+templates.env.filters["format_bst"] = format_bst
+
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -304,6 +316,19 @@ async def next_run():
         pass
     return {"next_run": None}
 
+
+@app.post("/clear-database")
+async def clear_db_endpoint(request: Request):
+    if not is_authenticated(request):
+        return {"status": "error", "message": "Unauthorized"}
+    from app.db import clear_database
+    try:
+        await clear_database()
+        return {"status": "success", "message": "Database cleared successfully."}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error clearing database: {e}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

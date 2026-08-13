@@ -32,7 +32,21 @@ Each JSON object MUST contain:
 - Example for Kenya Health Minister: 'Kenya Health Minister Susan Nakhumicha court'.
 - Example for economy: 'stock market digital chart red' or 'frustrated shopper empty wallet'.
 - Example for Politics: '[Politician Full Name] press conference portrait'.
-- 'image_prompt': An incredibly descriptive, highly visual prompt for an AI image generator (like Midjourney or Imagen) to create a photorealistic background image for this news. Must not contain text. Must describe lighting, mood, and subjects clearly. e.g. "Photorealistic wide shot of a crowded stock exchange floor during a crash, frantic traders, red screens glowing, cinematic lighting."
+- 'image_prompt': A richly descriptive scene-based prompt for the FLUX-realism AI image model on Pollinations.ai. Think like a senior AP/Reuters photo editor who KNOWS the specific story details. Follow ALL rules below:
+  RULE 1 — DESCRIBE THE SPECIFIC STORY SCENE: Do NOT write a generic scene. Describe the EXACT event and its real-world visual context. Ask yourself: Who are the real people? What specific place? What is happening right now in this story?
+    BAD (too generic): "politicians sitting in a conference room"
+    GOOD (specific): "Mirza Fakhrul Islam Alamgir, BNP Secretary General, addressing BNP Standing Committee members in a formal meeting room in Dhaka, Bangladesh, Bangladesh Nationalist Party green and white flags visible in background, urgent atmosphere as members review presidential nomination papers"
+  RULE 2 — COUNTRY & PARTY IDENTITY MUST BE VISIBLE: For Bangladesh political news, you MUST include visual markers: "Bangladesh flags or BNP party flags visible", "Bangladeshi politicians in formal attire", "Dhaka political office setting". Never generate a scene that could be ANY country — make it CLEARLY Bangladesh.
+  RULE 3 — SHARP & IN FOCUS ALWAYS: NEVER use words like '35mm lens', 'f/1.8', 'bokeh', 'shallow depth of field', 'documentary photography', or 'dark moody lighting' — these cause blurry, dark, or out-of-focus results. The scene must be WELL-LIT and SHARP. Every prompt MUST end with EXACTLY: ", well-lit, sharp focus throughout, every detail in focus, RAW photo, photorealistic, real photograph, no CGI, no illustration, no cartoon".
+  RULE 4 — BAN EMPTY SCENES: NEVER describe an empty room, empty streets, or faceless silhouettes. There must always be clearly visible, identifiable people actively doing something specific to the news story.
+  RULE 5 — MATCH MOOD TO CATEGORY:
+    * Tragedy/Accident/Crime → gritty, muted colors, people in distress
+    * Politics/Election → formal, high-energy, flags visible, official setting
+    * Economy/Business → bright office or market, people working with documents or screens
+    * Sports → bright stadium, athletes in action
+    * Technology → modern workspace, young people with glowing screens
+  RULE 6 — NAME FAMOUS PEOPLE DIRECTLY: For any known politician, celebrity, or public figure, use their EXACT FULL NAME. The FLUX model knows what they look like.
+  RULE 7 — NO TEXT IN THE IMAGE EVER.
 - 'social_media_caption': A rephrased summary for social media. Do NOT include any date or day in the caption.
 - 'engagement_question': A question to drive comments.
 - 'hashtags': 3 to 5 relevant hashtags."""
@@ -41,14 +55,16 @@ def _build_article_prompt(articles: List[Dict]) -> str:
     n = len(articles)
     prompt = f"You have been given {n} article(s). Return a JSON array with exactly {n} object(s).\n\n"
     for idx, article in enumerate(articles, start=1):
-        # Trim content to 800 chars so the full response fits within token budget
-        content = (article.get('content') or '')[:800]
+        # Send the ENTIRE article text so DeepSeek has zero boundaries
+        # when crafting the perfect image prompt and captions.
+        content = article.get('content') or ''
         prompt += f"Article {idx}:\n"
         prompt += f"Title: {article.get('title')}\n"
         prompt += f"Source: {article.get('source')}\n"
         prompt += f"Category: {article.get('category')}\n"
-        prompt += f"Content:\n{content}\n\n"
+        prompt += f"Full Article Content:\n{content}\n\n"
     return prompt
+
 
 
 def _parse_json_response(raw: str) -> list | None:
@@ -111,7 +127,7 @@ async def analyze_articles_batch(articles: List[Dict]) -> List[Dict]:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
-                max_tokens=4000,
+                max_tokens=6000,
             )
 
             raw_output = response.choices[0].message.content or ""

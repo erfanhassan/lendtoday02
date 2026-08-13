@@ -326,3 +326,9 @@ async def get_recent_videos(limit: int = 20) -> list[dict]:
             LIMIT $1
         ''', limit)
         return [dict(r) for r in records]
+
+async def clear_database():
+    """Clear all data from articles and video_queue tables."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        await conn.execute('TRUNCATE TABLE articles, video_queue RESTART IDENTITY CASCADE')

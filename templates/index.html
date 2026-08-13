@@ -28,6 +28,10 @@
                     <span class="text-xs font-semibold px-2 py-1 bg-gray-800 text-gray-400 rounded-full border border-gray-700">Automation Hub</span>
                 </div>
                 <div class="flex items-center gap-3">
+                    <button hx-post="/clear-database" hx-swap="none" onclick="if(confirm('Are you absolutely sure you want to clear all data? This cannot be undone.')){alert('Database cleared! Refreshing page...'); setTimeout(()=>location.reload(), 1000);}"
+                        class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-200">
+                        Clear Data
+                    </button>
                     <button hx-post="/trigger-instant" hx-swap="none" onclick="alert('Instant Post Triggered! One article will be scraped and posted immediately.')"
                         class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-200">
                         Instant Post
@@ -242,7 +246,7 @@
                     <!-- Graphic Thumbnail -->
                     <div class="sm:w-36 flex-shrink-0 bg-gray-900 flex items-center justify-center p-3">
                         {% set img_path = '/static/images/article_' ~ article.id ~ '.jpg' %}
-                        {% if article.status in ['PUBLISHED', 'PUBLISH', 'QA_FAILED'] and article.headline %}
+                        {% if article.status in ['PUBLISHED', 'PUBLISHING', 'PUBLISH', 'QA_FAILED'] and article.headline %}
                             <img src="{{ img_path }}"
                                  onerror="this.parentElement.innerHTML='<span class=\'text-gray-600 text-xs text-center\'>No graphic</span>'"
                                  class="graphic-thumb w-full rounded-lg object-cover aspect-square"
@@ -286,7 +290,7 @@
                             {% endif %}
 
                             <span class="ml-auto text-xs text-gray-600">
-                                {{ article.created_at.strftime('%d %b %Y, %H:%M') if article.created_at else '-' }}
+                                {{ article.created_at | format_bst }}
                             </span>
                         </div>
 

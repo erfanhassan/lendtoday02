@@ -12,8 +12,8 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "static", "images")
 os.makedirs(ASSETS_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-MIN_IMAGE_WIDTH = 600
-MIN_IMAGE_HEIGHT = 400
+MIN_IMAGE_WIDTH = 300
+MIN_IMAGE_HEIGHT = 150
 
 BROWSER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -121,71 +121,37 @@ def _download_and_validate(url: str, headers: dict, timeout: int = 10) -> Image.
         logger.warning(f"Failed to download/validate image from {url}: {e}")
         return None
 
-def _stage0_imagen(image_prompt: str, reference_image: Image.Image | None = None) -> Image.Image | None:
+def _stage0_pollinations(image_prompt: str, reference_image: Image.Image | None = None) -> Image.Image | None:
     if not image_prompt:
         return None
 
+    logger.info(f"Stage 0: Generating image via Pollinations.ai with prompt: '{image_prompt[:100]}...'")
     try:
-        import vertexai
-        vertexai.init()
-        from vertexai.preview.vision_models import ImageGenerationModel
-
-        if reference_image:
-            # ── Image-to-Image (Background Replacement) ──
-            model = ImageGenerationModel.from_pretrained("imagen-3.0-capability-001")
-            logger.info(f"Stage 0: Generating image via Imagen 3 (Image-to-Image) with prompt: '{image_prompt[:100]}...'")
-
-            # product-image mode keeps the subject and replaces the background using the prompt
-            response = model.edit_image(
-                base_image=reference_image,
-                prompt=image_prompt,
-                edit_mode="product-image",
-            )
-            images = response.images if hasattr(response, 'images') else getattr(response, 'generated_images', response)
-        else:
-            # ── Text-to-Image ──
-            model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
-            logger.info(f"Stage 0: Generating image via Imagen 3 (Text-to-Image) with prompt: '{image_prompt[:100]}...'")
-
-            images = model.generate_images(
-                prompt=image_prompt,
-                number_of_images=1,
-                aspect_ratio="3:4",
-            )
-
-        if images:
-            from io import BytesIO
-            # Handle different SDK versions returning images differently
-            if hasattr(images[0], '_image_bytes'):
-                img_byte_arr = images[0]._image_bytes
-            elif hasattr(images[0], 'image_bytes'):
-                img_byte_arr = images[0].image_bytes
-            elif hasattr(images[0], 'image'):
-                import base64
-                if hasattr(images[0].image, 'image_bytes'):
-                     img_byte_arr = images[0].image.image_bytes
-                else:
-                    return None
-            else:
-                return None
-
-            img = Image.open(BytesIO(img_byte_arr))
-            img.load()
-
-            w, h = img.size
-            if w < MIN_IMAGE_WIDTH or h < MIN_IMAGE_HEIGHT:
-                logger.warning(f"Stage 0: Generated image too small ({w}x{h})")
-                return None
-
-            logger.info(f"Stage 0: Success — Image generated via Imagen 3 ({w}x{h})")
-            return img
-
-    except ImportError:
-        logger.warning("Stage 0: google-cloud-aiplatform not installed. Skipping Imagen.")
+        import urllib.parse
+        # Pollinations is a free, no-API-key generator. We append a nologo flag.
+        safe_prompt = urllib.parse.quote(image_prompt)
+        url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true&safe=false"
+        
+        response = requests.get(url, timeout=60)
+        
+        if response.status_code != 200:
+            logger.warning(f"Stage 0: Pollinations failed: {response.status_code}")
+            return None
+            
+        img = Image.open(BytesIO(response.content))
+        img.load()
+        
+        w, h = img.size
+        if w < MIN_IMAGE_WIDTH or h < MIN_IMAGE_HEIGHT:
+            logger.warning(f"Stage 0: Generated image too small ({w}x{h})")
+            return None
+            
+        logger.info(f"Stage 0: Success — Image generated via Pollinations ({w}x{h})")
+        return img
+        
     except Exception as e:
-        logger.warning(f"Stage 0: Imagen generation failed: {e}")
-
-    return None
+        logger.warning(f"Stage 0: Pollinations generation failed: {e}")
+        return None
 
 
 def _stage1_publisher(article_image_url: str,
@@ -221,21 +187,29 @@ def _stage1_publisher(article_image_url: str,
     if not candidates:
         return None
 
+    best_img = None
+    max_area = 0
+
     for url in candidates:
         if not url:
             continue
         if _is_url_bad_image(url):
-            logger.debug(f"Stage 1: Skipping bad/tracker/paywall URL: {url[:80]}")
             continue
         if _is_url_likely_graphic(url):
-            logger.debug(f"Stage 1: Skipping graphic/logo URL: {url[:80]}")
             continue
-        logger.info(f"Stage 1: Trying article image — {url[:80]}")
+        
+        logger.debug(f"Stage 1: Trying candidate — {url[:80]}")
         img = _download_and_validate(url, BROWSER_HEADERS, timeout=10)
         if img:
-            logger.info(f"Stage 1: Success — {url[:80]} ({img.size[0]}x{img.size[1]})")
-            return img
-        logger.debug(f"Stage 1: Rejected (too small or failed): {url[:80]}")
+            area = img.size[0] * img.size[1]
+            if area > max_area:
+                max_area = area
+                best_img = img
+
+    if best_img:
+        logger.info(f"Stage 1: Success — Found highest quality candidate ({best_img.size[0]}x{best_img.size[1]})")
+        
+        return best_img
 
     logger.info(f"Stage 1: All {len(candidates)} article image(s) failed — moving to Stage 2.")
     return None
@@ -506,20 +480,18 @@ def generate_graphic(article_id: int, decision: dict) -> str:
                 reference_img = wiki_img
                 image_source_label = f"wikipedia:{wiki_title}"
 
-        # Now pass the reference image to Gemini (Stage 0)
-        # If Gemini fails, we will fall back to using the reference image directly
-        if image_prompt:
-            gemini_img = _stage0_imagen(image_prompt, reference_image=reference_img)
-            if gemini_img:
-                bg_img = gemini_img
-                # Keep the source label of the reference so we know where it originated,
-                # but denote it was processed by Gemini
-                if reference_img:
-                    image_source_label = f"gemini_edited_from_{image_source_label}"
-                else:
-                    image_source_label = "gemini_imagen"
-            else:
-                logger.warning("Gemini image generation failed. Falling back to reference image.")
+        # ── THE FIX ──
+        # If we successfully found a REAL photo from the news article, Google, or Wiki, USE IT!
+        # Do NOT throw away a real photo to generate a fake AI painting.
+        if reference_img:
+            bg_img = reference_img
+        else:
+            # Fallback to AI generation ONLY if no real photo could be found anywhere
+            if image_prompt:
+                logger.info("No real photo found. Falling back to AI Generation (Stage 0)...")
+                bg_img = _stage0_pollinations(image_prompt)
+                if bg_img:
+                    image_source_label = "pollinations"
 
         # If Gemini failed and we have a reference, use it directly.
         # Otherwise use fallback.
@@ -534,11 +506,32 @@ def generate_graphic(article_id: int, decision: dict) -> str:
     decision["_image_source_label"] = image_source_label
     logger.info(f"Image source for article {article_id}: {image_source_label}")
 
-    # ── Strategy: Fit Image to Canvas (Cover) ───────
-    # Fill the 1080x1350 canvas completely, cropping as necessary.
-    # centering=(0.5, 0.0) anchors the crop at the top so that if vertical cropping
-    # is needed, we don't lose the top of the image (since the bottom will be covered by the black panel).
-    canvas = ImageOps.fit(bg_img.convert("RGBA"), (1080, 1350), method=Image.LANCZOS, centering=(0.5, 0.0))
+    # ── Strategy: Blurred Background Fill ───────
+    # Fill the 1080x1350 canvas completely without cropping the original image.
+    # 1. Create a blurred, darkened background that fills the entire frame.
+    # 2. Resize the original image to fit inside without cropping.
+    # 3. Paste the original image in the center.
+    from PIL import ImageFilter
+    
+    # Create the background
+    bg_blurred = ImageOps.fit(bg_img.convert("RGBA"), (1080, 1350), method=Image.LANCZOS, centering=(0.5, 0.5))
+    bg_blurred = bg_blurred.filter(ImageFilter.GaussianBlur(25))
+    
+    # Darken the background slightly so the main image pops
+    darkener = Image.new("RGBA", bg_blurred.size, (0, 0, 0, 128))
+    bg_blurred = Image.alpha_composite(bg_blurred, darkener)
+    
+    # Resize the main image to fit within 1080x1350 while maintaining aspect ratio
+    bg_img.thumbnail((1080, 1350), Image.LANCZOS)
+    main_img = bg_img.convert("RGBA")
+    
+    # Calculate position to center the image horizontally, but align to top vertically
+    x = (1080 - main_img.width) // 2
+    # Place it at the top so the bottom of the image is not covered by the black gradient and text caption
+    y = 0 
+    
+    canvas = bg_blurred
+    canvas.alpha_composite(main_img, (x, y))
 
     # ── Overlay branded template (Lens Today frame) ──────────────────────────
     template_path = os.path.join(ASSETS_DIR, "post 1.png")

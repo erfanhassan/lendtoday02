@@ -492,32 +492,49 @@ async def run_instant_pipeline():
         meta['article_id'] = article_id
 
         # Phase 2: Run AI decision
-        from app.ai import evaluate_article
+        from app.ai import analyze_articles_batch
         logger.info(f"Instant Post AI Evaluation for: {title}")
-        decision = await asyncio.to_thread(evaluate_article, meta)
+        ai_decisions = await analyze_articles_batch([meta])
         
-        status_action = decision.get("action", "DROP")
-        topic = decision.get("topic", "none")
-        score = decision.get("score", 0)
-        reasoning = decision.get("reasoning", "")
-        summary = decision.get("summary", "")
-        caption = decision.get("caption", "")
-        image_prompt = decision.get("image_prompt", "")
+        if not ai_decisions:
+            logger.error(f"AI returned no decision for instant article {article_id}.")
+            await update_article_ai_decision(
+                article_id, "DROP", "none", 0, "", "", "", "", "", "DeepSeek-v4", None
+            )
+            return
+
+        decision = ai_decisions[0]
+        status_action = "PUBLISH"
+        category = decision.get("category", "Core")
+        headline = decision.get("headline", "")
         search_query = decision.get("search_query", "")
-        ai_model_used = decision.get("model_used", "")
+        image_prompt = decision.get("image_prompt", "")
+        social_caption = decision.get("social_media_caption", "")
+        engagement_question = decision.get("engagement_question", "")
+        
+        raw_hashtags = decision.get("hashtags", [])
+        if isinstance(raw_hashtags, list):
+            hashtags = " ".join([h if h.startswith('#') else f"#{h}" for h in raw_hashtags])
+        else:
+            hashtags = str(raw_hashtags)
+        
+        full_caption = f"{social_caption}\n\n{engagement_question}\n\n{hashtags}"
+        if url:
+            full_caption += f"\n\nSource Article: {url}"
 
         await update_article_ai_decision(
-            article_id,
-            status_action,
-            topic,
-            score,
-            reasoning,
-            summary,
-            caption,
-            image_prompt,
-            search_query,
-            ai_model_used,
-            None
+            article_id=article_id,
+            status=status_action,
+            category=category,
+            slot=0,
+            headline=headline,
+            source_text=meta.get('source', ''),
+            search_query=search_query,
+            social_media_caption=social_caption,
+            engagement_question=engagement_question,
+            hashtags=hashtags,
+            article_image_url=meta.get('article_image_url', ''),
+            image_prompt=image_prompt
         )
 
         if status_action == "PUBLISH":
@@ -531,10 +548,13 @@ async def run_instant_pipeline():
             if img_path:
                 logger.info(f"Instant Post publishing to Facebook and Instagram for: {title}")
                 await mark_article_publishing(article_id)
-                success = await _publish_to_all(article_id, img_path, caption)
-                if success:
+                ig_id, fb_id = await _publish_to_all(article_id, img_path, full_caption)
+                if ig_id or fb_id:
+                    await mark_article_published(article_id, ig_id, fb_id)
                     logger.info("Instant Post complete!")
                 else:
+                    from app.db import reset_publishing_to_publish
+                    await reset_publishing_to_publish(article_id)
                     logger.error("Instant Post failed to publish.")
             else:
                 logger.error("Instant Post image generation failed.")
